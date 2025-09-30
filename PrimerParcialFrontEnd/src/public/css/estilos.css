@@ -1,0 +1,171 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+canvas {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    position: relative;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 30%, rgba(52, 73, 94, 0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(44, 62, 80, 0.3) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+#form-container {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 40px 35px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    width: 400px;
+    max-width: 90%;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    z-index: 1;
+}
+
+#form-container:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4);
+}
+
+#login-form, #registration-form {
+    display: flex;
+    flex-direction: column;
+}
+
+#login-form h2, #registration-form h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #ecf0f1;
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: 0.5px;
+}
+
+#login-form label, #registration-form label {
+    margin: 10px 0 6px;
+    font-weight: 600;
+    color: rgba(236, 240, 241, 0.9);
+    font-size: 13px;
+}
+
+#login-form input, #registration-form input {
+    margin-bottom: 18px;
+    padding: 12px 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.08);
+    font-size: 15px;
+    color: #ecf0f1;
+    transition: all 0.3s ease;
+    font-family: inherit;
+}
+
+#login-form input::placeholder, 
+#registration-form input::placeholder {
+    color: rgba(236, 240, 241, 0.5);
+}
+
+#login-form input:focus, #registration-form input:focus {
+    border-color: #3498db;
+    background-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+    outline: none;
+}
+
+#login-form button, #registration-form button {
+    margin-top: 10px;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    background: #3498db;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+#login-form button:hover, #registration-form button:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
+}
+
+#login-form button:active, #registration-form button:active {
+    transform: translateY(0);
+}
+
+#login-option, #registration-option {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 14px;
+    color: rgba(236, 240, 241, 0.8);
+}
+
+#login-option a, #registration-option a {
+    color: #5dade2;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+#login-option a:hover, #registration-option a:hover {
+    color: #3498db;
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+    #form-container {
+        padding: 35px 25px;
+        width: 95%;
+    }
+
+    #login-form h2, #registration-form h2 {
+        font-size: 24px;
+        margin-bottom: 25px;
+    }
+
+    #login-form input, #registration-form input {
+        padding: 11px 13px;
+        font-size: 14px;
+    }
+
+    #login-form button, #registration-form button {
+        padding: 12px;
+        font-size: 14px;
+    }
+}

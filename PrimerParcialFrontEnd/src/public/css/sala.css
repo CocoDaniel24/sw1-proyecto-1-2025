@@ -1,0 +1,156 @@
+#rooms-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 25px;
+    overflow: hidden;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#rooms-table th,
+#rooms-table td {
+    padding: 14px 18px;
+    text-align: left;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+#rooms-table th {
+    background: #34495e;
+    color: #ecf0f1;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#rooms-table th:first-child {
+    border-top-left-radius: 10px;
+}
+
+#rooms-table th:last-child {
+    border-top-right-radius: 10px;
+}
+
+#rooms-table tbody tr {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+#rooms-table tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+#rooms-table tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.15);
+}
+
+#rooms-table td {
+    color: #ecf0f1;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#rooms-table tbody tr:last-child td:first-child {
+    border-bottom-left-radius: 10px;
+}
+
+#rooms-table tbody tr:last-child td:last-child {
+    border-bottom-right-radius: 10px;
+}
+
+#rooms-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.action-button {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:active {
+    transform: translateY(0);
+}
+
+.edit-button {
+    background: #f39c12;
+    color: white;
+}
+
+.edit-button:hover {
+    background: #e67e22;
+}
+
+.delete-button {
+    background: #e74c3c;
+    color: white;
+}
+
+.delete-button:hover {
+    background: #c0392b;
+}
+
+.invite-button {
+    background: #e67e22;
+    color: white;
+}
+
+.invite-button:hover {
+    background: #d35400;
+}
+
+@media (max-width: 768px) {
+    #rooms-table {
+        font-size: 13px;
+        margin-top: 20px;
+    }
+
+    #rooms-table th,
+    #rooms-table td {
+        padding: 12px 14px;
+    }
+
+    #rooms-table th {
+        font-size: 12px;
+    }
+
+    .action-button {
+        padding: 6px 12px;
+        font-size: 12px;
+        margin-right: 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    #rooms-table {
+        display: block;
+        overflow-x: auto;
+    }
+
+    #rooms-table th,
+    #rooms-table td {
+        padding: 10px 12px;
+        font-size: 12px;
+    }
+
+    .action-button {
+        padding: 5px 10px;
+        font-size: 11px;
+        margin-right: 3px;
+        margin-bottom: 3px;
+    }
+}

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editar Sala</title>
+    <link rel="stylesheet" href="/css/estilos.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+    <style>
+      .content-wrapper {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .content-wrapper h1 {
+        text-align: center;
+        color: #ecf0f1;
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 20px;
+      }
+
+      #edit-room-form {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      #edit-room-form > div {
+        margin-bottom: 15px;
+      }
+
+      #edit-room-form label {
+        display: block;
+        margin-bottom: 4px;
+        color: #ecf0f1;
+        font-weight: 500;
+        font-size: 13px;
+      }
+
+      #edit-room-form input[type="text"],
+      #edit-room-form textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        background-color: rgba(255, 255, 255, 0.08);
+        font-size: 14px;
+        color: #ecf0f1;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+
+      #edit-room-form input[type="text"]:focus,
+      #edit-room-form textarea:focus {
+        border-color: #3498db;
+        outline: none;
+      }
+
+      #edit-room-form textarea {
+        resize: vertical;
+        min-height: 60px;
+      }
+
+      #edit-room-form button[type="submit"] {
+        width: 100%;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        background: #27ae60;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 5px;
+      }
+
+      #edit-room-form button[type="submit"]:hover {
+        background: #229954;
+      }
+
+      @media (max-width: 768px) {
+        .content-wrapper {
+          max-width: 100%;
+        }
+
+        .content-wrapper h1 {
+          font-size: 20px;
+          margin-bottom: 15px;
+        }
+
+        #edit-room-form {
+          padding: 15px;
+        }
+
+        #edit-room-form > div {
+          margin-bottom: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav id="navbar">
+      <div class="nav-container">
+        <div class="nav-brand">Editar Sala</div>
+        <ul class="nav-links">
+          <li><a href="./dashboard.html">Volver al Dashboard</a></li>
+          <li><button id="logout-button">Cerrar Sesión</button></li>
+        </ul>
+      </div>
+    </nav>
+    <main id="main-content">
+      <div class="content-wrapper">
+        <h1>Formulario para Editar Sala</h1>
+        <form id="edit-room-form">
+          <input type="hidden" id="room-id" />
+          <div>
+            <label for="title">Título:</label>
+            <input type="text" id="title" name="title" required />
+          </div>
+          <div>
+            <label for="xml">XML:</label>
+            <textarea id="xml" name="xml" rows="5" required></textarea>
+          </div>
+          <div>
+            <label for="description">Descripción:</label>
+            <textarea id="description" name="description" rows="5"></textarea>
+          </div>
+          <button type="submit">Guardar Cambios</button>
+        </form>
+      </div>
+    </main>
+    <video id="video" src="/video.mp4" style="display: none" controls></video>
+    <script src="./js/config.js"></script>
+
+    <script>
+      function getQueryParam(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
+      }
+      async function loadRoomData() {
+        const roomId = getQueryParam("id");
+        if (roomId) {
+          try {
+            const response = await fetch(`${API_URL}/apis/sala/${roomId}`, {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            });
+            const data = await response.json();
+            if (data.error === false && data.data.length > 0) {
+              const room = data.data[0];
+              document.getElementById("room-id").value = room.id;
+              document.getElementById("title").value = room.title;
+              document.getElementById("xml").value = room.xml;
+              document.getElementById("description").value = room.description;
+            } else {
+              alert("Error al cargar los datos de la sala.");
+            }
+          } catch (error) {
+            alert(`Error de red: ${error.message}`);
+          }
+        } else {
+          alert("No se encontró el ID de la sala.");
+        }
+      }
+
+      async function handleEditRoom(event) {
+        event.preventDefault();
+        const id = document.getElementById("room-id").value;
+        const title = document.getElementById("title").value;
+        const xml = document.getElementById("xml").value;
+        const description = document.getElementById("description").value;
+        try {
+          const response = await fetch(`${API_URL}/apis/sala/${id}`, {
+            method: "PUT",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: title,
+              xml: xml,
+              description: description,
+            }),
+          });
+
+          if (response.ok) {
+            alert(`Sala con ID: ${id} actualizada.`);
+            window.location.href = "./dashboard.html";
+          } else {
+            alert(`Error al actualizar la sala: ${response.statusText}`);
+          }
+        } catch (error) {
+          alert(`Error de red: ${error.message}`);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        loadRoomData();
+        document
+          .getElementById("edit-room-form")
+          .addEventListener("submit", handleEditRoom);
+      });
+    </script>
+  </body>
+</html>
