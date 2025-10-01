@@ -1,0 +1,10584 @@
+class UMLElement {
+  constructor(id, type, x, y) {
+    this.id = id;
+    this.type = type;
+    this.x = x;
+    this.y = y;
+    this.selected = false;
+  }
+
+  select() {
+    this.selected = true;
+    this.updateDisplay();
+  }
+
+  deselect() {
+    this.selected = false;
+    this.updateDisplay();
+  }
+
+  updateDisplay() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.classList.toggle("selected", this.selected);
+    }
+  }
+
+  move(deltaX, deltaY) {
+    let newX = this.x + deltaX;
+    let newY = this.y + deltaY;
+    const canvas = document.getElementById("canvas");
+    const element = document.getElementById(this.id);
+    if (canvas && element) {
+      const elementWidth = element.offsetWidth;
+      const elementHeight = element.offsetHeight;
+      const canvasWidth = canvas.offsetWidth;
+      const canvasHeight = canvas.offsetHeight;
+      newX = Math.max(0, Math.min(newX, canvasWidth - elementWidth));
+      newY = Math.max(0, Math.min(newY, canvasHeight - elementHeight));
+    }
+    this.x = newX;
+    this.y = newY;
+    this.updatePosition();
+    if (typeof ConnectionManager !== "undefined") {
+      ConnectionManager.updateConnections();
+    }
+    if (typeof PersistenceManager !== "undefined") {
+      PersistenceManager.markAsChanged();
+    }
+  }
+
+  updatePosition() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      if (
+        DragManager.isDragging &&
+        this.id === DragManager.currentElement?.id
+      ) {
+        element.style.willChange = "transform, left, top";
+        element.style.transform = "translate3d(0,0,0)";
+        window.requestAnimationFrame(() => {
+          element.style.left = `${this.x}px`;
+          element.style.top = `${this.y}px`;
+        });
+      } else {
+        element.style.willChange = "auto";
+        element.style.left = `${this.x}px`;
+        element.style.top = `${this.y}px`;
+      }
+    }
+  }
+}
+
+class UMLClass extends UMLElement {
+  constructor(id, x, y, name = "NuevaClase") {
+    super(id, "class", x, y);
+    this.name = name;
+    this.attributes = [];
+    this.methods = [];
+    this.stereotype = "";
+    this.visibility = "public";
+    this.connections = [];
+  }
+
+  validateUniqueAttribute(name, type, excludeIndex = null) {
+    const normalizedName = name.trim();
+    const normalizedType = type.trim();
+    if (!normalizedName || !normalizedType) {
+      return {
+        valid: false,
+        message: "El nombre y el tipo son obligatorios.",
+      };
+    }
+    const duplicates = this.attributes.filter((attr, index) => {
+      if (excludeIndex !== null && index === excludeIndex) return false;
+      return attr.name.trim().toLowerCase() === normalizedName.toLowerCase();
+    });
+    if (duplicates.length > 0) {
+      const hasSameType = duplicates.some(
+        (attr) =>
+          attr.type.trim().toLowerCase() === normalizedType.toLowerCase()
+      );
+      if (hasSameType) {
+        return {
+          valid: false,
+          message: `Ya existe un atributo "${normalizedName}" de tipo "${normalizedType}".`,
+        };
+      }
+    }
+    return { valid: true };
+  }
+
+  getPrimaryKeys() {
+    return this.attributes.filter((attr) => attr.isPrimaryKey);
+  }
+
+  hasPrimaryKeys() {
+    return this.getPrimaryKeys().length > 0;
+  }
+
+  addAttribute(attribute) {
+    // 🎯 MARCAR COMO EDICIÓN REAL
+    window.IS_REAL_EDIT = true;
+    window.IS_ONLY_SELECTION = false;
+
+    this.attributes.push(attribute);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+
+    // 🎯 RESETEAR FLAG DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_REAL_EDIT = false;
+    }, 1000);
+  }
+
+  addMethod(method) {
+    // 🎯 MARCAR COMO EDICIÓN REAL
+    window.IS_REAL_EDIT = true;
+    window.IS_ONLY_SELECTION = false;
+
+    this.methods.push(method);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+
+    // 🎯 RESETEAR FLAG DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_REAL_EDIT = false;
+    }, 1000);
+  }
+
+  removeAttribute(index) {
+    // 🎯 MARCAR COMO EDICIÓN REAL
+    window.IS_REAL_EDIT = true;
+    window.IS_ONLY_SELECTION = false;
+
+    this.attributes.splice(index, 1);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+
+    // 🎯 RESETEAR FLAG DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_REAL_EDIT = false;
+    }, 1000);
+  }
+
+  removeMethod(index) {
+    // 🎯 MARCAR COMO EDICIÓN REAL
+    window.IS_REAL_EDIT = true;
+    window.IS_ONLY_SELECTION = false;
+
+    this.methods.splice(index, 1);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+
+    // 🎯 RESETEAR FLAG DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_REAL_EDIT = false;
+    }, 1000);
+  }
+
+  toHTML() {
+    return `
+                    <div class="uml-class" id="${this.id}" style="left: ${
+      this.x
+    }px; top: ${this.y}px;">
+                        <div class="class-header">
+                            <div>
+                                ${
+                                  this.stereotype
+                                    ? `<<${this.stereotype}>>`
+                                    : ""
+                                }
+                                <div style="font-size: 1.1em;">${
+                                  this.name
+                                }</div>
+                            </div>
+                            <div class="class-actions">
+                                <button onclick="DiagramManager.editClass('${
+                                  this.id
+                                }')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="DiagramManager.deleteElement('${
+                                  this.id
+                                }')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="class-section">
+                            <div class="section-title">
+                                Atributos
+                                <button class="add-btn" onclick="AttributeManager.showAddDialog('${
+                                  this.id
+                                }')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            ${this.attributes
+                              .map(
+                                (attr, index) => `
+                                <div class="attribute ${
+                                  attr.isPrimaryKey
+                                    ? "attribute-primary-key"
+                                    : ""
+                                }">
+                                    <span>${this.formatAttribute(attr)}</span>
+                                    <div class="item-actions">
+                                        <button data-action="edit-attribute" data-class-id="${
+                                          this.id
+                                        }" data-index="${index}" title="Editar" type="button">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button data-action="delete-attribute" data-class-id="${
+                                          this.id
+                                        }" data-index="${index}" title="Eliminar" type="button">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `
+                              )
+                              .join("")}
+                        </div>
+                        <div class="class-section">
+                            <div class="section-title">
+                                Métodos
+                                <button class="add-btn" onclick="MethodManager.showAddDialog('${
+                                  this.id
+                                }')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            ${this.methods
+                              .map(
+                                (method, index) => `
+                                <div class="method">
+                                    <span>${this.formatMethod(method)}</span>
+                                    <div class="item-actions">
+                                        <button data-action="edit-method" data-class-id="${
+                                          this.id
+                                        }" data-index="${index}" title="Editar" type="button">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button data-action="delete-method" data-class-id="${
+                                          this.id
+                                        }" data-index="${index}" title="Eliminar" type="button">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `
+                              )
+                              .join("")}
+                        </div>
+                    </div>
+                `;
+  }
+
+  formatAttribute(attr) {
+    const visibilitySymbol =
+      {
+        private: "-",
+        protected: "#",
+        public: "+",
+        package: "~",
+      }[attr.visibility] || "+";
+    const primaryKeySymbol = attr.isPrimaryKey
+      ? ' <span class="primary-key-icon">🔑</span>'
+      : "";
+    const staticModifier = attr.isStatic ? " {static}" : "";
+    return `${visibilitySymbol} ${attr.name}: ${attr.type}${staticModifier}${primaryKeySymbol}`;
+  }
+
+  formatMethod(method) {
+    const visibilitySymbol =
+      {
+        private: "-",
+        protected: "#",
+        public: "+",
+        package: "~",
+      }[method.visibility] || "+";
+    const params =
+      method.parameters && method.parameters.length > 0
+        ? method.parameters.map((p) => `${p.name}: ${p.type}`).join(", ")
+        : "";
+    const returnType = method.returnType ? `: ${method.returnType}` : "";
+    return `${visibilitySymbol} ${method.name}(${params})${returnType}`;
+  }
+
+  updateDisplay() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.outerHTML = this.toHTML();
+      this.attachEventListeners();
+    }
+    super.updateDisplay();
+    ConnectionManager.updateConnections();
+  }
+
+  attachEventListeners() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.addEventListener("mousedown", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+
+        // 🎯 SOLO SELECCIÓN INMEDIATA - NO DRAG INMEDIATO
+        DiagramManager.selectElement(this);
+
+        // 🎯 CONFIGURAR DRAG SOLO SI HAY MOVIMIENTO REAL
+        DragManager.prepareDrag(e, this);
+      });
+      element.addEventListener("click", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+        e.stopPropagation();
+        DiagramManager.selectElement(this);
+      });
+    }
+  }
+}
+
+class UMLEnum extends UMLElement {
+  constructor(id, x, y, name = "NuevaEnumeracion") {
+    super(id, "enum", x, y);
+    this.name = name;
+    this.values = [];
+    this.stereotype = "enumeration";
+  }
+
+  addValue(value) {
+    this.values.push(value);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+  }
+
+  removeValue(index) {
+    this.values.splice(index, 1);
+    this.updateDisplay();
+    PersistenceManager.markAsChanged();
+  }
+
+  toHTML() {
+    return `
+                    <div class="uml-class" id="${this.id}" style="left: ${
+      this.x
+    }px; top: ${this.y}px;">
+                        <div class="class-header">
+                            <div>
+                                <<${this.stereotype}>>
+                                <div style="font-size: 1.1em;">${
+                                  this.name
+                                }</div>
+                            </div>
+                            <div class="class-actions">
+                                <button onclick="DiagramManager.editEnum('${
+                                  this.id
+                                }')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="DiagramManager.deleteElement('${
+                                  this.id
+                                }')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="class-section">
+                            <div class="section-title">
+                                Valores
+                                <button class="add-btn" onclick="EnumManager.showAddDialog('${
+                                  this.id
+                                }')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            ${this.values
+                              .map(
+                                (value, index) => `
+                                <div class="attribute">
+                                    <span>${value}</span>
+                                    <div class="item-actions">
+                                        <button data-action="edit-enum-value" data-enum-id="${this.id}" data-index="${index}" title="Editar" type="button">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button data-action="delete-enum-value" data-enum-id="${this.id}" data-index="${index}" title="Eliminar" type="button">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `
+                              )
+                              .join("")}
+                        </div>
+                    </div>
+                `;
+  }
+
+  updateDisplay() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.outerHTML = this.toHTML();
+      this.attachEventListeners();
+    }
+    super.updateDisplay();
+    ConnectionManager.updateConnections();
+  }
+
+  attachEventListeners() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.addEventListener("mousedown", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+
+        // 🎯 SOLO SELECCIÓN INMEDIATA - NO DRAG INMEDIATO
+        DiagramManager.selectElement(this);
+
+        // 🎯 CONFIGURAR DRAG SOLO SI HAY MOVIMIENTO REAL
+        DragManager.prepareDrag(e, this);
+      });
+      element.addEventListener("click", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+        e.stopPropagation();
+        DiagramManager.selectElement(this);
+      });
+    }
+  }
+}
+
+class UMLPackage extends UMLElement {
+  constructor(id, x, y, name = "NuevoPaquete") {
+    super(id, "package", x, y);
+    this.name = name;
+    this.description = "";
+  }
+
+  toHTML() {
+    return `
+                    <div class="uml-package" id="${this.id}" style="left: ${
+      this.x
+    }px; top: ${this.y}px;">
+                        <div class="package-header">
+                            <div class="package-name">${this.name}</div>
+                            <div class="package-actions">
+                                <button onclick="DiagramManager.editPackage('${
+                                  this.id
+                                }')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="DiagramManager.deleteElement('${
+                                  this.id
+                                }')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="package-body">
+                            ${this.description || "Descripción del paquete..."}
+                        </div>
+                    </div>
+                `;
+  }
+
+  updateDisplay() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.outerHTML = this.toHTML();
+      this.attachEventListeners();
+    }
+    super.updateDisplay();
+    ConnectionManager.updateConnections();
+  }
+
+  attachEventListeners() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.addEventListener("mousedown", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+
+        // 🎯 SOLO SELECCIÓN INMEDIATA - NO DRAG INMEDIATO
+        DiagramManager.selectElement(this);
+
+        // 🎯 CONFIGURAR DRAG SOLO SI HAY MOVIMIENTO REAL
+        DragManager.prepareDrag(e, this);
+      });
+      element.addEventListener("click", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+        e.stopPropagation();
+        DiagramManager.selectElement(this);
+      });
+    }
+  }
+}
+
+class UMLNote extends UMLElement {
+  constructor(id, x, y, text = "Nueva nota...") {
+    super(id, "note", x, y);
+    this.text = text;
+  }
+
+  toHTML() {
+    return `
+                    <div class="uml-note" id="${this.id}" style="left: ${this.x}px; top: ${this.y}px;">
+                        <div class="note-header">
+                            <i class="fas fa-sticky-note me-2"></i>
+                            <div class="note-actions">
+                                <button onclick="DiagramManager.editNote('${this.id}')" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="DiagramManager.deleteElement('${this.id}')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="note-body">
+                            ${this.text}
+                        </div>
+                    </div>
+                `;
+  }
+
+  updateDisplay() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.outerHTML = this.toHTML();
+      this.attachEventListeners();
+    }
+    super.updateDisplay();
+    ConnectionManager.updateConnections();
+  }
+
+  attachEventListeners() {
+    const element = document.getElementById(this.id);
+    if (element) {
+      element.addEventListener("mousedown", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+
+        // 🎯 SOLO SELECCIÓN INMEDIATA - NO DRAG INMEDIATO
+        DiagramManager.selectElement(this);
+
+        // 🎯 CONFIGURAR DRAG SOLO SI HAY MOVIMIENTO REAL
+        DragManager.prepareDrag(e, this);
+      });
+      element.addEventListener("click", (e) => {
+        if (
+          e.target.closest("button[data-action]") ||
+          e.target.closest("button[onclick]")
+        ) {
+          return;
+        }
+        e.stopPropagation();
+        DiagramManager.selectElement(this);
+      });
+    }
+  }
+}
+
+class DiagramManager {
+  static elements = new Map();
+  static selectedElement = null;
+  static idCounter = 0;
+  static storageKey = null;
+
+  static getStorageKey() {
+    if (this.storageKey) {
+      return this.storageKey;
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const salaId = urlParams.get("id");
+    return `sala-${salaId || "default"}`;
+  }
+
+  static setStorageKey(key) {
+    this.storageKey = key;
+  }
+
+  static validateUniqueElementName(name, type, excludeId = null) {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      return { valid: false, message: "El nombre no puede estar vacío." };
+    }
+    const existingElements = Array.from(this.elements.values()).filter(
+      (element) => {
+        if (excludeId && element.id === excludeId) return false;
+        return this.getElementTypeForValidation(element) === type;
+      }
+    );
+    const isDuplicate = existingElements.some(
+      (element) =>
+        element.name.trim().toLowerCase() === normalizedName.toLowerCase()
+    );
+    if (isDuplicate) {
+      return {
+        valid: false,
+        message: `Ya existe ${this.getTypeDisplayName(
+          type
+        )} con el nombre "${normalizedName}".`,
+        suggestedName: this.generateUniqueName(normalizedName, type),
+      };
+    }
+    return { valid: true };
+  }
+
+  static getElementTypeForValidation(element) {
+    if (element.type === "class") {
+      if (element.stereotype === "interface") return "interface";
+      if (element.stereotype === "abstract") return "abstract";
+      return "class";
+    }
+    return element.type;
+  }
+
+  static getTypeDisplayName(type) {
+    const displayNames = {
+      class: "una clase",
+      interface: "una interfaz",
+      abstract: "una clase abstracta",
+      enum: "una enumeración",
+      package: "un paquete",
+      note: "una nota",
+    };
+    return displayNames[type] || "un elemento";
+  }
+
+  static generateUniqueName(baseName, type) {
+    const normalizedBaseName = baseName.trim();
+    let counter = 2;
+    let newName = `${normalizedBaseName}${counter}`;
+    while (!this.validateUniqueElementName(newName, type).valid) {
+      counter++;
+      newName = `${normalizedBaseName}${counter}`;
+      if (counter > 100) break;
+    }
+    return newName;
+  }
+
+  static createElement(type, x, y) {
+    const canvas = document.getElementById("canvas");
+    if (canvas) {
+      const defaultElementWidth = 120;
+      const defaultElementHeight = 100;
+      const canvasWidth = canvas.offsetWidth;
+      const canvasHeight = canvas.offsetHeight;
+      x = Math.max(0, Math.min(x, canvasWidth - defaultElementWidth));
+      y = Math.max(0, Math.min(y, canvasHeight - defaultElementHeight));
+    }
+    const id = `element_${++this.idCounter}`;
+    let element;
+    let defaultName;
+    switch (type) {
+      case "class":
+        defaultName = "NuevaClase";
+        break;
+      case "interface":
+        defaultName = "NuevaInterfaz";
+        break;
+      case "abstract":
+        defaultName = "ClaseAbstracta";
+        break;
+      case "enum":
+        defaultName = "NuevaEnumeracion";
+        break;
+      case "package":
+        defaultName = "NuevoPaquete";
+        break;
+      case "note":
+        defaultName = "Nueva nota...";
+        break;
+      default:
+        return null;
+    }
+    const validation = this.validateUniqueElementName(defaultName, type);
+    const finalName = validation.valid ? defaultName : validation.suggestedName;
+    switch (type) {
+      case "class":
+        element = new UMLClass(id, x, y, finalName);
+        break;
+      case "interface":
+        element = new UMLClass(id, x, y, finalName);
+        element.stereotype = "interface";
+        break;
+      case "abstract":
+        element = new UMLClass(id, x, y, finalName);
+        element.stereotype = "abstract";
+        break;
+      case "enum":
+        element = new UMLEnum(id, x, y, finalName);
+        break;
+      case "package":
+        element = new UMLPackage(id, x, y, finalName);
+        break;
+      case "note":
+        element = new UMLNote(id, x, y, finalName);
+        break;
+      default:
+        return null;
+    }
+    if (!validation.valid) {
+      this.showValidationMessage(
+        `${validation.message} Se ha creado como "${finalName}".`,
+        "warning"
+      );
+    }
+    this.elements.set(id, element);
+    this.addToCanvas(element);
+    this.selectElement(element);
+    PersistenceManager.markAsChanged();
+    return element;
+  }
+
+  static showValidationMessage(message, type = "info") {
+    const colors = {
+      info: "#3b82f6",
+      warning: "#f59e0b",
+      error: "#ef4444",
+      success: "#10b981",
+    };
+    const icons = {
+      info: "fas fa-info-circle",
+      warning: "fas fa-exclamation-triangle",
+      error: "fas fa-times-circle",
+      success: "fas fa-check-circle",
+    };
+    const toast = document.createElement("div");
+    toast.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: ${colors[type]};
+                    color: white;
+                    padding: 12px 16px;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    z-index: 1000;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    opacity: 0;
+                    transform: translateY(-10px);
+                    transition: all 0.3s ease;
+                    max-width: 350px;
+                `;
+    toast.innerHTML = `<i class="${icons[type]} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateY(0)";
+    }, 10);
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(-10px)";
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+  static addToCanvas(element) {
+    const canvas = document.getElementById("canvas");
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = element.toHTML();
+    canvas.appendChild(tempDiv.firstElementChild);
+    element.attachEventListeners();
+  }
+
+  static selectElement(element) {
+    if (
+      window.BLOCK_ALL_SOCKET_IO ||
+      (window.aiChatbot && window.aiChatbot.isSelectingForAI)
+    ) {
+      if (this.selectedElement) {
+        document
+          .getElementById(this.selectedElement.id)
+          ?.classList.remove("selected-element");
+      }
+      const domElement = document.getElementById(element.id);
+      if (domElement) {
+        domElement.classList.add("selected-element");
+        if (
+          window.aiChatbot &&
+          typeof window.aiChatbot.showElementPropertiesViewOnly === "function"
+        ) {
+          window.aiChatbot.showElementPropertiesViewOnly(domElement);
+        }
+      }
+      this.selectedElement = element;
+      return;
+    }
+
+    // 🔄 SELECCIÓN NORMAL CON FLAG DE SOLO SELECCIÓN
+    console.log("🔄 Selección normal - marcando como solo selección");
+
+    // 🎯 MARCAR COMO SOLO SELECCIÓN (NO EDICIÓN REAL)
+    window.IS_ONLY_SELECTION = true;
+    window.IS_REAL_EDIT = false;
+
+    if (this.selectedElement) {
+      this.selectedElement.deselect();
+    }
+    this.selectedElement = element;
+    element.select();
+    PropertiesManager.showProperties(element);
+
+    // 🎯 DESACTIVAR FLAG DE SOLO SELECCIÓN DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_ONLY_SELECTION = false;
+      console.log("✅ Flag de solo selección desactivado");
+    }, 500);
+
+    console.log("✅ Elemento seleccionado:", element.id, "modo solo selección");
+  }
+
+  static deselectAll() {
+    if (
+      window.persistentSelection &&
+      window.persistentSelection.hasSelection()
+    ) {
+      window.persistentSelection.clearSelection();
+    }
+
+    document.querySelectorAll(".selected-element").forEach((el) => {
+      el.classList.remove("selected-element");
+      el.removeAttribute("data-selecting");
+      el.removeAttribute("data-persistent-selected");
+    });
+
+    if (this.selectedElement) {
+      this.selectedElement.deselect();
+      this.selectedElement = null;
+    }
+    PropertiesManager.showEmpty();
+  }
+
+  static deleteElement(id) {
+    const element = this.elements.get(id);
+    if (element) {
+      const domElement = document.getElementById(id);
+      if (domElement) {
+        domElement.remove();
+      }
+      ConnectionManager.removeElementConnections(id);
+      this.elements.delete(id);
+      if (this.selectedElement && this.selectedElement.id === id) {
+        this.selectedElement = null;
+        PropertiesManager.showEmpty();
+      }
+      PersistenceManager.markAsChanged();
+    }
+  }
+
+  static getClass(id) {
+    return this.elements.get(id);
+  }
+
+  static getEnum(id) {
+    return this.elements.get(id);
+  }
+
+  static editEnum(id) {
+    const enumElement = this.getEnum(id);
+    if (enumElement) {
+      const html = `
+                        <div class="modal fade" id="editEnumModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Editar Enumeración</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Nombre</label>
+                                            <input type="text" class="form-control" id="enumName" value="${enumElement.name}">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" onclick="DiagramManager.updateEnum('${id}')">Actualizar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+      document.body.insertAdjacentHTML("beforeend", html);
+      const modal = new bootstrap.Modal(
+        document.getElementById("editEnumModal")
+      );
+      modal.show();
+      document
+        .getElementById("editEnumModal")
+        .addEventListener("hidden.bs.modal", function () {
+          this.remove();
+        });
+    }
+  }
+
+  static updateEnum(id) {
+    const enumElement = this.getEnum(id);
+    if (enumElement) {
+      const newName = document.getElementById("enumName").value;
+      if (newName !== enumElement.name) {
+        const validation = this.validateUniqueElementName(newName, "enum", id);
+        if (!validation.valid) {
+          this.showValidationMessage(validation.message, "error");
+          document.getElementById("enumName").focus();
+          return;
+        }
+      }
+      enumElement.name = newName;
+      enumElement.updateDisplay();
+      bootstrap.Modal.getInstance(
+        document.getElementById("editEnumModal")
+      ).hide();
+      PropertiesManager.showProperties(enumElement);
+      PersistenceManager.markAsChanged();
+      this.showValidationMessage(
+        "Enumeración actualizada correctamente",
+        "success"
+      );
+    }
+  }
+
+  static editPackage(id) {
+    const packageElement = this.elements.get(id);
+    if (packageElement) {
+      const html = `
+                        <div class="modal fade" id="editPackageModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Editar Paquete</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Nombre</label>
+                                            <input type="text" class="form-control" id="packageName" value="${packageElement.name}">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Descripción</label>
+                                            <textarea class="form-control" id="packageDescription" rows="3">${packageElement.description}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" onclick="DiagramManager.updatePackage('${id}')">Actualizar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+      document.body.insertAdjacentHTML("beforeend", html);
+      const modal = new bootstrap.Modal(
+        document.getElementById("editPackageModal")
+      );
+      modal.show();
+      document
+        .getElementById("editPackageModal")
+        .addEventListener("hidden.bs.modal", function () {
+          this.remove();
+        });
+    }
+  }
+
+  static updatePackage(id) {
+    const packageElement = this.elements.get(id);
+    if (packageElement) {
+      const newName = document.getElementById("packageName").value;
+      if (newName !== packageElement.name) {
+        const validation = this.validateUniqueElementName(
+          newName,
+          "package",
+          id
+        );
+        if (!validation.valid) {
+          this.showValidationMessage(validation.message, "error");
+          document.getElementById("packageName").focus();
+          return;
+        }
+      }
+      packageElement.name = newName;
+      packageElement.description =
+        document.getElementById("packageDescription").value;
+      packageElement.updateDisplay();
+      bootstrap.Modal.getInstance(
+        document.getElementById("editPackageModal")
+      ).hide();
+      PropertiesManager.showProperties(packageElement);
+      PersistenceManager.markAsChanged();
+      this.showValidationMessage(
+        "Paquete actualizado correctamente",
+        "success"
+      );
+    }
+  }
+
+  static validateAndUpdateElementName(elementId, newName) {
+    // 🎯 MARCAR COMO EDICIÓN REAL
+    window.IS_REAL_EDIT = true;
+    window.IS_ONLY_SELECTION = false;
+
+    const element = this.elements.get(elementId);
+    if (!element || !newName.trim()) {
+      this.showValidationMessage("El nombre no puede estar vacío", "error");
+      return false;
+    }
+    if (newName.trim() !== element.name) {
+      const elementType = this.getElementTypeForValidation(element);
+      const validation = this.validateUniqueElementName(
+        newName.trim(),
+        elementType,
+        elementId
+      );
+      if (!validation.valid) {
+        this.showValidationMessage(validation.message, "error");
+        return false;
+      }
+    }
+    element.name = newName.trim();
+    element.updateDisplay();
+    PersistenceManager.markAsChanged();
+
+    // 🎯 RESETEAR FLAG DESPUÉS DE UN MOMENTO
+    setTimeout(() => {
+      window.IS_REAL_EDIT = false;
+    }, 1000);
+
+    return true;
+  }
+
+  static editNote(id) {
+    const noteElement = this.elements.get(id);
+    if (noteElement) {
+      const html = `
+                        <div class="modal fade" id="editNoteModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Editar Nota</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Contenido</label>
+                                            <textarea class="form-control" id="noteText" rows="5">${noteElement.text}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" onclick="DiagramManager.updateNote('${id}')">Actualizar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+      document.body.insertAdjacentHTML("beforeend", html);
+      const modal = new bootstrap.Modal(
+        document.getElementById("editNoteModal")
+      );
+      modal.show();
+      document
+        .getElementById("editNoteModal")
+        .addEventListener("hidden.bs.modal", function () {
+          this.remove();
+        });
+    }
+  }
+
+  static updateNote(id) {
+    const noteElement = this.elements.get(id);
+    if (noteElement) {
+      noteElement.text = document.getElementById("noteText").value;
+      noteElement.updateDisplay();
+      bootstrap.Modal.getInstance(
+        document.getElementById("editNoteModal")
+      ).hide();
+      PropertiesManager.showProperties(noteElement);
+      PersistenceManager.markAsChanged();
+    }
+  }
+
+  static editClass(id) {
+    const classElement = this.getClass(id);
+    if (classElement) {
+      const html = `
+                        <div class="modal fade" id="editClassModal" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Editar Clase</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Nombre de la Clase</label>
+                                            <input type="text" class="form-control" id="className" value="${
+                                              classElement.name
+                                            }">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Estereotipo</label>
+                                            <select class="form-select" id="classStereotype">
+                                                <option value="" ${
+                                                  !classElement.stereotype
+                                                    ? "selected"
+                                                    : ""
+                                                }>Ninguno</option>
+                                                <option value="interface" ${
+                                                  classElement.stereotype ===
+                                                  "interface"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Interface</option>
+                                                <option value="abstract" ${
+                                                  classElement.stereotype ===
+                                                  "abstract"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Abstract</option>
+                                                <option value="entity" ${
+                                                  classElement.stereotype ===
+                                                  "entity"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Entity</option>
+                                                <option value="controller" ${
+                                                  classElement.stereotype ===
+                                                  "controller"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Controller</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Visibilidad</label>
+                                            <select class="form-select" id="classVisibility">
+                                                <option value="public" ${
+                                                  classElement.visibility ===
+                                                  "public"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Public</option>
+                                                <option value="private" ${
+                                                  classElement.visibility ===
+                                                  "private"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Private</option>
+                                                <option value="protected" ${
+                                                  classElement.visibility ===
+                                                  "protected"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Protected</option>
+                                                <option value="package" ${
+                                                  classElement.visibility ===
+                                                  "package"
+                                                    ? "selected"
+                                                    : ""
+                                                }>Package</option>
+                                            </select>
+                                        </div>
+                                        
+                                    </div>
+
+                                    <div>
+                                        <label>Relaciones</label>
+                                        <button class="btn btn-sm btn-outline-info w-100 mt-2" onclick="ConnectionManager.showConnectionDialog('${id}')">
+                                            <i class="fas fa-link me-1"></i> Asignar Relación
+                                        </button>
+                                    </div>
+
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" onclick="DiagramManager.updateClass('${id}')">Actualizar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+      document.body.insertAdjacentHTML("beforeend", html);
+      const modal = new bootstrap.Modal(
+        document.getElementById("editClassModal")
+      );
+      modal.show();
+      document
+        .getElementById("editClassModal")
+        .addEventListener("hidden.bs.modal", function () {
+          this.remove();
+        });
+    }
+  }
+
+  static updateClass(id) {
+    const classElement = this.getClass(id);
+    if (classElement) {
+      const newName = document.getElementById("className").value;
+      const newStereotype = document.getElementById("classStereotype").value;
+      if (newName !== classElement.name) {
+        const elementType = newStereotype || "class";
+        const validation = this.validateUniqueElementName(
+          newName,
+          elementType,
+          id
+        );
+        if (!validation.valid) {
+          this.showValidationMessage(validation.message, "error");
+          document.getElementById("className").focus();
+          return;
+        }
+      }
+      classElement.name = newName;
+      classElement.stereotype = newStereotype;
+      classElement.visibility =
+        document.getElementById("classVisibility").value;
+      classElement.updateDisplay();
+      bootstrap.Modal.getInstance(
+        document.getElementById("editClassModal")
+      ).hide();
+      PropertiesManager.showProperties(classElement);
+      PersistenceManager.markAsChanged();
+      this.showValidationMessage("Clase actualizada correctamente", "success");
+    }
+  }
+
+  static clearAll() {
+    this.elements.clear();
+    this.selectedElement = null;
+    ConnectionManager.connections = [];
+    document.getElementById("canvas").innerHTML = `
+                    <svg class="connections-svg" id="connections">
+                        <defs>
+                            <!-- Flecha para dependencia -->
+                            <marker id="arrowhead" markerWidth="12" markerHeight="12" 
+                                    refX="12" refY="6" orient="auto">
+                                <polygon points="0 0, 0 12, 12 6" fill="none" stroke="#000" stroke-width="1.5" />
+                            </marker>
+                            <!-- Marcador para herencia/implementación -->
+                            <marker id="inheritance" markerWidth="15" markerHeight="15" 
+                                    refX="15" refY="7.5" orient="auto">
+                                <polygon points="0 7.5, 15 0, 15 15" fill="white" stroke="#000" stroke-width="1.5" />
+                            </marker>
+                            <!-- Marcador de diamante para agregación -->
+                            <marker id="aggregation" markerWidth="15" markerHeight="15" 
+                                    refX="0" refY="7.5" orient="auto">
+                                <polygon points="0 7.5, 7.5 0, 15 7.5, 7.5 15" fill="white" stroke="#000" stroke-width="1.5" />
+                            </marker>
+                            <!-- Marcador de diamante para composición -->
+                            <marker id="composition" markerWidth="15" markerHeight="15" 
+                                    refX="0" refY="7.5" orient="auto">
+                                <polygon points="0 7.5, 7.5 0, 15 7.5, 7.5 15" fill="black" stroke="#000" stroke-width="1.5" />
+                            </marker>
+                        </defs>
+                    </svg>
+                `;
+    PropertiesManager.showEmpty();
+  }
+
+  static exportDiagram() {
+    const data = {
+      elements: Array.from(this.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      })),
+      connections: ConnectionManager.connections,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "diagrama_clases.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  static async exportSpringBoot() {
+    try {
+      // ✅ NUEVO ENFOQUE: Usar XML de la sala en lugar de datos del frontend
+      const urlParams = new URLSearchParams(window.location.search);
+      const salaId = urlParams.get("id");
+
+      if (!salaId || salaId === "default") {
+        alert(
+          "⚠️ No se puede exportar: No hay una sala específica abierta.\n💡 Abre una sala desde el dashboard para poder exportar a Spring Boot."
+        );
+        return;
+      }
+
+      console.log(`🗃️ Exportando Spring Boot desde sala ID: ${salaId}`);
+      console.log(
+        "✅ NUEVO MÉTODO: Usando XML de la sala (no datos inventados del frontend)"
+      );
+
+      // Mostrar mensaje de carga
+      this.showValidationMessage(
+        "🔄 Generando proyecto Spring Boot...",
+        "info"
+      );
+
+      const response = await fetch(
+        `http://localhost:8083/apis/crearPagina/exportarSpringBoot/${salaId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          // ✅ NO ENVIAMOS BODY - El backend usa el XML de la sala directamente
+        }
+      );
+
+      console.log("📡 Respuesta del servidor:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = `spring-boot-sala-${salaId}.zip`;
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+        console.log(
+          "✅ Proyecto Spring Boot generado exitosamente desde XML de sala"
+        );
+
+        // Mostrar mensaje de éxito
+        this.showValidationMessage(
+          "🚀 Spring Boot generado correctamente desde la sala",
+          "success"
+        );
+      } else {
+        let errorMessage = `Error ${response.status}: ${response.statusText}`;
+
+        try {
+          const errorData = await response.json();
+          console.error("❌ Error del servidor:", errorData);
+          errorMessage =
+            errorData.error ||
+            errorData.message ||
+            errorData.detalles ||
+            errorMessage;
+        } catch (parseError) {
+          console.error(
+            "❌ No se pudo parsear la respuesta de error:",
+            parseError
+          );
+          const errorText = await response.text();
+          console.error("❌ Respuesta del servidor como texto:", errorText);
+          errorMessage = errorText || errorMessage;
+        }
+
+        this.showValidationMessage(`❌ ${errorMessage}`, "error");
+        console.error("❌ Error completo:", errorMessage);
+      }
+    } catch (error) {
+      console.error("❌ Error al exportar Spring Boot:", error);
+      const errorMessage =
+        error.message || error.toString() || "Error desconocido";
+      this.showValidationMessage(
+        `❌ Error al conectar con el servidor: ${errorMessage}`,
+        "error"
+      );
+    }
+  }
+
+  // ⚠️ MÉTODO ANTERIOR (mantener para referencia, pero ya no se usa)
+  static async exportSpringBootAnterior() {
+    try {
+      console.log(
+        "⚠️ MÉTODO ANTERIOR: Usando datos del frontend (puede inventar relaciones)"
+      );
+
+      // Normalizar elementos antes de enviar
+      const normalizedData = this.normalizeForSpringBootDirect();
+
+      if (normalizedData.elements.length === 0) {
+        alert("No hay elementos UML para exportar");
+        return;
+      }
+
+      console.log("Datos normalizados para Spring Boot:", normalizedData);
+
+      const response = await fetch(
+        "http://localhost:8083/apis/crearPagina/exportarSpringBoot",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(normalizedData),
+        }
+      );
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = url;
+        downloadLink.download = "spring-boot-project.zip";
+        downloadLink.click();
+        URL.revokeObjectURL(url);
+        console.log("Proyecto Spring Boot generado exitosamente");
+      } else {
+        const errorData = await response.json();
+        alert(`Error al generar proyecto Spring Boot: ${errorData.message}`);
+      }
+    } catch (error) {
+      console.error("Error al exportar Spring Boot:", error);
+      alert("Error al conectar con el servidor");
+    }
+  }
+
+  static normalizeForSpringBootDirect() {
+    try {
+      console.log("🚀 Iniciando normalización para Spring Boot...");
+
+      const elements = Array.from(this.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      }));
+      console.log("📊 Elementos encontrados:", elements.length);
+
+      // 🔍 DEBUG: Verificar conexiones paso a paso
+      console.log(
+        "🔍 DEBUG ConnectionManager disponible:",
+        typeof ConnectionManager !== "undefined"
+      );
+      console.log(
+        "🔍 DEBUG ConnectionManager.connections existe:",
+        typeof ConnectionManager !== "undefined" &&
+          ConnectionManager.connections
+      );
+
+      let rawConnections = [];
+      if (
+        typeof ConnectionManager !== "undefined" &&
+        ConnectionManager.connections
+      ) {
+        rawConnections = ConnectionManager.connections;
+        console.log(
+          "🔗 Conexiones raw del ConnectionManager:",
+          rawConnections.length
+        );
+        rawConnections.forEach((conn, i) => {
+          console.log(`  ${i + 1}. RAW:`, JSON.stringify(conn, null, 2));
+        });
+      } else {
+        console.log("❌ ConnectionManager no disponible o sin conexiones");
+      }
+
+      // ✅ CREAR CONEXIONES DE PRUEBA SI NO HAY NINGUNA
+      if (rawConnections.length === 0 && elements.length >= 2) {
+        console.log("🧪 Creando conexiones de prueba...");
+        rawConnections = [
+          {
+            id: "test_conn_1",
+            source: elements[0].id,
+            target: elements[1].id,
+            type: "association",
+            sourceMultiplicity: "1",
+            targetMultiplicity: "N",
+            label: "Test Relationship",
+          },
+        ];
+        console.log("✅ Conexión de prueba creada:", rawConnections[0]);
+      }
+
+      // ✅ NORMALIZAR CONEXIONES: Convertir a formato esperado por backend
+      const connections = rawConnections.map((conn) => {
+        const normalized = {
+          id: conn.id || `conn_${Date.now()}`,
+          fromElement: conn.source || conn.fromElement,
+          toElement: conn.target || conn.toElement,
+          relationshipType: conn.type || conn.relationshipType || "association",
+          multiplicity:
+            conn.sourceMultiplicity && conn.targetMultiplicity
+              ? `${conn.sourceMultiplicity}:${conn.targetMultiplicity}`
+              : conn.multiplicity || "1:N",
+          label: conn.label || "",
+          sourceMultiplicity: conn.sourceMultiplicity,
+          targetMultiplicity: conn.targetMultiplicity,
+        };
+
+        console.log("✅ Conexión normalizada:", normalized);
+        return normalized;
+      });
+
+      console.log(`🔗 Total conexiones normalizadas: ${connections.length}`);
+
+      // Crear copia profunda para no modificar los originales
+      const normalizedElements = JSON.parse(JSON.stringify(elements));
+
+      // Paso 1: Asegurar que cada clase tenga una llave primaria
+      normalizedElements.forEach((element) => {
+        if (element.type === "class") {
+          console.log(`🏗️ Procesando clase: ${element.name}`);
+          // Agregar llave primaria si no existe
+          if (!element.attributes) element.attributes = [];
+
+          const hasPrimaryKey = element.attributes.some((attr) => {
+            if (typeof attr === "object" && attr !== null) {
+              return attr.isPrimaryKey === true;
+            } else if (typeof attr === "string") {
+              return (
+                attr.toLowerCase().includes("pk") ||
+                attr.toLowerCase().includes("primary")
+              );
+            }
+            return false;
+          });
+
+          // ✅ Verificar si el usuario quiere PKs compuestas
+          const primaryKeyCount = element.attributes.filter(
+            (attr) => typeof attr === "object" && attr.isPrimaryKey === true
+          ).length;
+
+          if (primaryKeyCount > 1) {
+            // Usuario tiene múltiples PKs - permitir PK compuesta
+            element.allowCompositePK = true;
+            console.log(
+              `🔑 PK compuesta detectada para ${element.name}: ${primaryKeyCount} claves`
+            );
+          } else if (!hasPrimaryKey) {
+            // No tiene PK - generar una por defecto
+            const defaultPK = {
+              name: "id",
+              type: "Long",
+              visibility: "private",
+              isStatic: false,
+              isPrimaryKey: true,
+              isForeignKey: false,
+              isGenerated: true,
+              defaultValue: null,
+            };
+            element.attributes.unshift(defaultPK);
+            element.allowCompositePK = false;
+            console.log(
+              `🔑 PK generada automáticamente para ${element.name}: Long id`
+            );
+          } else {
+            // Tiene una sola PK - marcar como simple
+            element.allowCompositePK = false;
+            console.log(`🔑 PK simple detectada para ${element.name}`);
+          }
+        }
+      });
+
+      // Paso 2: Procesar relaciones y generar llaves foráneas
+      if (connections.length > 0) {
+        console.log("🔄 Procesando relaciones...");
+        this.processRelationshipsForSpringBoot(normalizedElements, connections);
+      }
+
+      console.log("✅ Normalización completada exitosamente");
+      return {
+        elements: normalizedElements,
+        connections: connections,
+      };
+    } catch (error) {
+      console.error("❌ Error en normalizeForSpringBootDirect:", error);
+      // En caso de error, devolver elementos sin normalizar
+      const elements = Array.from(this.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      }));
+      return {
+        elements: elements,
+        connections: [],
+      };
+    }
+  }
+
+  static processRelationshipsForSpringBoot(elements, connections) {
+    // Crear mapa de elementos por ID para acceso rápido
+    const elementMap = new Map();
+    elements.forEach((el) => elementMap.set(el.id, el));
+
+    connections.forEach((connection) => {
+      try {
+        if (!connection.fromElement || !connection.toElement) return;
+
+        const fromEl = elementMap.get(connection.fromElement);
+        const toEl = elementMap.get(connection.toElement);
+
+        if (
+          !fromEl ||
+          !toEl ||
+          fromEl.type !== "class" ||
+          toEl.type !== "class"
+        )
+          return;
+
+        console.log(`🔗 Analizando relación: ${fromEl.name} -> ${toEl.name}`);
+        console.log(
+          `   Tipo: ${connection.relationshipType}, Multiplicidad: ${connection.multiplicity}`
+        );
+
+        // Obtener llave primaria de la entidad referenciada
+        const referencedPK = this.getPrimaryKeyInfo(toEl);
+
+        // Procesar según el tipo de relación y multiplicidad
+        this.addForeignKeyBasedOnRelationship(
+          fromEl,
+          toEl,
+          connection,
+          referencedPK
+        );
+      } catch (error) {
+        console.error(`❌ Error procesando conexión:`, error);
+      }
+    });
+  }
+
+  static getPrimaryKeyInfo(element) {
+    if (!element.attributes) return { type: "Long", name: "id" };
+
+    const pkAttr = element.attributes.find(
+      (attr) => typeof attr === "object" && attr.isPrimaryKey === true
+    );
+
+    return pkAttr
+      ? { type: pkAttr.type, name: pkAttr.name }
+      : { type: "Long", name: "id" };
+  }
+
+  static addForeignKeyBasedOnRelationship(
+    fromEl,
+    toEl,
+    connection,
+    referencedPK
+  ) {
+    const { multiplicity, relationshipType } = connection;
+
+    console.log(
+      `🔍 Determinando FK para: ${fromEl.name} -> ${toEl.name} (${multiplicity})`
+    );
+
+    // Determinar dónde colocar la FK según la multiplicidad
+    if (this.isOneToMany(multiplicity)) {
+      // 1:N - FK va en el lado "muchos" (fromEl)
+      this.addForeignKey(fromEl, toEl, referencedPK, "ManyToOne");
+      console.log(`   📌 FK ManyToOne agregada en ${fromEl.name}`);
+    } else if (this.isManyToOne(multiplicity)) {
+      // N:1 - FK va en el lado "muchos" (fromEl, que representa N)
+      this.addForeignKey(fromEl, toEl, referencedPK, "ManyToOne");
+      console.log(`   📌 FK ManyToOne agregada en ${fromEl.name}`);
+    } else if (this.isOneToOne(multiplicity)) {
+      // 1:1 - FK puede ir en cualquier lado, la ponemos en fromEl
+      this.addForeignKey(fromEl, toEl, referencedPK, "OneToOne");
+      console.log(`   📌 FK OneToOne agregada en ${fromEl.name}`);
+    } else if (this.isManyToMany(multiplicity)) {
+      // N:N - Se maneja con tabla intermedia, no agregamos FK directas
+      console.log(
+        `   📌 Relación N:N detectada - se manejará con tabla intermedia`
+      );
+    }
+
+    // Para composición, el hijo siempre tiene FK al padre
+    if (relationshipType === "composition") {
+      this.addForeignKey(
+        toEl,
+        fromEl,
+        this.getPrimaryKeyInfo(fromEl),
+        "ManyToOne",
+        false
+      );
+      console.log(`   📌 FK Composition agregada en ${toEl.name} (hijo)`);
+    }
+  }
+
+  static addForeignKey(
+    targetEl,
+    referencedEl,
+    referencedPK,
+    relationship,
+    nullable = true
+  ) {
+    if (!targetEl.attributes) targetEl.attributes = [];
+
+    // La FK debe tener exactamente el mismo nombre y tipo que la PK referenciada
+    const fkName = referencedPK.name; // Mismo nombre que la PK
+
+    // Verificar si ya existe esta FK
+    const existingFK = targetEl.attributes.find(
+      (attr) => typeof attr === "object" && attr.name === fkName
+    );
+
+    if (!existingFK) {
+      const foreignKey = {
+        name: fkName, // Mismo nombre que la PK
+        type: referencedPK.type, // Mismo tipo que la PK
+        visibility: "private",
+        isStatic: false,
+        isPrimaryKey: false, // NO es PK
+        isForeignKey: true, // ES FK
+        isGenerated: true, // Marca que fue generada automáticamente
+        referencedEntity: referencedEl.name,
+        referencedField: referencedPK.name,
+        relationship: relationship,
+        nullable: nullable,
+        defaultValue: null,
+      };
+
+      targetEl.attributes.push(foreignKey);
+      console.log(
+        `🔗 FK generada: ${targetEl.name}.${fkName} (${referencedPK.type}) -> ${referencedEl.name}.${referencedPK.name} (${relationship})`
+      );
+    }
+  }
+
+  static isOneToMany(multiplicity) {
+    return (
+      multiplicity === "1..*" ||
+      multiplicity === "1..n" ||
+      multiplicity === "1,*" ||
+      multiplicity === "1,n"
+    );
+  }
+
+  static isManyToOne(multiplicity) {
+    return (
+      multiplicity === "*.1" ||
+      multiplicity === "n.1" ||
+      multiplicity === "*,1" ||
+      multiplicity === "n,1"
+    );
+  }
+
+  static isManyToMany(multiplicity) {
+    return (
+      multiplicity === "*..*" ||
+      multiplicity === "n..n" ||
+      multiplicity === "*,*" ||
+      multiplicity === "n,n" ||
+      multiplicity === "m,n"
+    );
+  }
+
+  static isOneToOne(multiplicity) {
+    return (
+      multiplicity === "1..1" ||
+      multiplicity === "1,1" ||
+      multiplicity === "1:1" ||
+      multiplicity === "1" ||
+      !multiplicity
+    );
+  }
+
+  static redrawAll() {
+    try {
+      // 🎯 PRESERVAR SELECCIÓN ACTUAL
+      let elementoSeleccionado = null;
+      let propiedadesVisibles = false;
+
+      if (this.selectedElement) {
+        elementoSeleccionado = this.selectedElement.id;
+        // Verificar si el panel de propiedades está visible
+        const propertiesPanel = document.getElementById("properties-panel");
+        propiedadesVisibles =
+          propertiesPanel && propertiesPanel.style.display !== "none";
+        console.log(
+          "🎯 Preservando selección:",
+          elementoSeleccionado,
+          "propiedades visibles:",
+          propiedadesVisibles
+        );
+      }
+
+      for (const element of this.elements.values()) {
+        element.updateDisplay();
+      }
+      ConnectionManager.updateConnections();
+
+      // 🎯 RESTAURAR SELECCIÓN DESPUÉS DEL REDIBUJO
+      if (elementoSeleccionado && this.elements.has(elementoSeleccionado)) {
+        const elementoRestaurado = this.elements.get(elementoSeleccionado);
+        if (elementoRestaurado) {
+          // Restaurar visualmente la selección
+          const domElement = document.getElementById(elementoSeleccionado);
+          if (domElement) {
+            domElement.classList.add("selected-element");
+            domElement.setAttribute("data-selected", "true");
+          }
+
+          // Restaurar el elemento seleccionado en DiagramManager
+          this.selectedElement = elementoRestaurado;
+
+          // Restaurar las propiedades si estaban visibles
+          if (propiedadesVisibles && typeof PropertiesManager !== "undefined") {
+            setTimeout(() => {
+              PropertiesManager.showProperties(elementoRestaurado);
+              console.log(
+                "✅ Propiedades restauradas para:",
+                elementoSeleccionado
+              );
+            }, 50);
+          }
+
+          console.log("✅ Selección restaurada para:", elementoSeleccionado);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error redibujando el diagrama:", error);
+    }
+  }
+
+  static importDiagram() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            this.loadDiagram(data);
+          } catch (error) {
+            alert("Error al cargar el archivo: " + error.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  }
+
+  static loadDiagram(data) {
+    this.clearAll();
+    data.elements.forEach((elementData) => {
+      const element = new UMLClass(
+        elementData.id,
+        elementData.x,
+        elementData.y,
+        elementData.name
+      );
+      Object.assign(element, elementData);
+      this.elements.set(element.id, element);
+      this.addToCanvas(element);
+    });
+    if (data.connections) {
+      ConnectionManager.connections = data.connections;
+      ConnectionManager.updateConnections();
+    }
+  }
+
+  static loadDiagramFromXML(xmlData) {
+    try {
+      if (typeof xmlData === "object" && xmlData !== null) {
+        return this.processDiagramData(xmlData);
+      }
+      if (!xmlData || (typeof xmlData === "string" && xmlData.trim() === "")) {
+        console.warn("⚠️ XML/JSON vacío, creando diagrama nuevo");
+        this.clearAll();
+        return false;
+      }
+      let diagramData;
+      try {
+        diagramData = JSON.parse(xmlData);
+      } catch (parseError) {
+        console.error("❌ Error parseando JSON:", parseError);
+        try {
+          let cleanedXml = xmlData.replace(/\\"/g, '"');
+          try {
+            diagramData = JSON.parse(cleanedXml);
+          } catch (innerError) {
+            cleanedXml = cleanedXml.replace(/\\\\/g, "\\");
+            try {
+              diagramData = JSON.parse(cleanedXml);
+            } catch (innerError2) {
+              const jsonMatch = cleanedXml.match(/{[\s\S]*}/);
+              if (jsonMatch) {
+                try {
+                  diagramData = JSON.parse(jsonMatch[0]);
+                } catch (innerError3) {
+                  throw new Error("No se pudo extraer JSON válido del XML");
+                }
+              } else {
+                throw new Error("No se encontró estructura JSON en el XML");
+              }
+            }
+          }
+        } catch (cleaningError) {
+          console.error(
+            "❌ Todos los intentos de parseo fallaron:",
+            cleaningError
+          );
+          throw new Error(
+            `No se pudo parsear el XML/JSON: ${cleaningError.message}`
+          );
+        }
+      }
+      if (!diagramData) {
+        throw new Error("Los datos del diagrama son nulos después del parseo");
+      }
+      return this.processDiagramData(diagramData);
+    } catch (error) {
+      console.error("❌ Error procesando XML/JSON del diagrama:", error);
+      console.error("📄 Datos problemáticos:", xmlData);
+      this.clearAll();
+      return false;
+    }
+  }
+
+  static processDiagramData(diagramData) {
+    try {
+      if (!diagramData) {
+        console.warn("⚠️ Datos de diagrama nulos o vacíos");
+        return false;
+      }
+      this.clearAll();
+      let elementsData = null;
+      if (diagramData.elements) {
+        elementsData = diagramData.elements;
+      }
+      if (!elementsData && diagramData.data && diagramData.data.elements) {
+        elementsData = diagramData.data.elements;
+      }
+      if (
+        !elementsData &&
+        diagramData.diagram &&
+        diagramData.diagram.elements
+      ) {
+        elementsData = diagramData.diagram.elements;
+      }
+      if (elementsData) {
+        const elementData = Array.isArray(elementsData)
+          ? elementsData
+          : Object.values(elementsData);
+        if (elementData && elementData.length > 0) {
+          elementData.forEach((element) => {
+            try {
+              if (!element) {
+                console.warn("⚠️ Elemento nulo encontrado");
+                return;
+              }
+              if (!element.type) {
+                console.warn("⚠️ Elemento sin tipo encontrado:", element);
+                return;
+              }
+              let newElement;
+              switch (element.type) {
+                case "class":
+                  newElement = new UMLClass(
+                    element.id || `element_${this.idCounter++}`,
+                    element.x || 100,
+                    element.y || 100,
+                    element.name || "NuevaClase"
+                  );
+                  newElement.stereotype = element.stereotype || "";
+                  newElement.visibility = element.visibility || "public";
+                  newElement.attributes = Array.isArray(element.attributes)
+                    ? element.attributes
+                    : [];
+                  newElement.methods = Array.isArray(element.methods)
+                    ? element.methods
+                    : [];
+                  break;
+                case "enum":
+                  newElement = new UMLEnum(
+                    element.id || `element_${this.idCounter++}`,
+                    element.x || 100,
+                    element.y || 100,
+                    element.name || "NuevaEnumeracion"
+                  );
+                  newElement.values = Array.isArray(element.values)
+                    ? element.values
+                    : [];
+                  break;
+                case "package":
+                  newElement = new UMLPackage(
+                    element.id || `element_${this.idCounter++}`,
+                    element.x || 100,
+                    element.y || 100,
+                    element.name || "NuevoPaquete"
+                  );
+                  newElement.description = element.description || "";
+                  break;
+                case "note":
+                  newElement = new UMLNote(
+                    element.id || `element_${this.idCounter++}`,
+                    element.x || 100,
+                    element.y || 100,
+                    element.text || "Nueva nota"
+                  );
+                  break;
+                default:
+                  console.warn(
+                    `⚠️ Tipo de elemento desconocido: ${element.type}`
+                  );
+                  return;
+              }
+              if (newElement) {
+                this.elements.set(newElement.id, newElement);
+                this.addToCanvas(newElement);
+              }
+            } catch (elementError) {
+              console.error(
+                `❌ Error procesando elemento:`,
+                element,
+                elementError
+              );
+            }
+          });
+        }
+      } else {
+        console.warn(
+          "⚠️ No se encontraron elementos en ninguna estructura conocida"
+        );
+      }
+      let connectionsData = null;
+      if (diagramData.connections) {
+        connectionsData = diagramData.connections;
+      }
+      if (
+        !connectionsData &&
+        diagramData.data &&
+        diagramData.data.connections
+      ) {
+        connectionsData = diagramData.data.connections;
+      }
+      if (
+        !connectionsData &&
+        diagramData.diagram &&
+        diagramData.diagram.connections
+      ) {
+        connectionsData = diagramData.diagram.connections;
+      }
+      if (connectionsData && Array.isArray(connectionsData)) {
+        ConnectionManager.connections = connectionsData;
+        ConnectionManager.updateConnections();
+      } else {
+        console.warn("⚠️ No hay conexiones en el diagrama o formato inválido");
+        ConnectionManager.connections = [];
+      }
+      ConnectionManager.updateConnections();
+      return true;
+    } catch (error) {
+      console.error("❌ Error procesando datos del diagrama:", error);
+      this.clearAll();
+      return false;
+    }
+  }
+}
+
+class DragManager {
+  static isDragging = false;
+  static currentElement = null;
+  static startX = 0;
+  static startY = 0;
+  static elementStartX = 0;
+  static pendingElement = null;
+  static dragThreshold = 5;
+  static hasMoved = false;
+  static elementStartY = 0;
+  static boundDrag = null;
+  static boundStopDrag = null;
+  static lastMouseX = 0;
+  static lastMouseY = 0;
+  static isAnimationFrameRequested = false;
+  static canvasWidth = 0;
+  static canvasHeight = 0;
+  static lastElementDimension = {};
+  static frameCount = 0;
+  static lastPosition = null;
+  static lastMove = 0;
+
+  static prepareDrag(e, element) {
+    // 🎯 PREPARAR DRAG PERO NO ACTIVAR INMEDIATAMENTE
+    e.preventDefault();
+    this.pendingElement = element;
+    this.startX = e.clientX;
+    this.startY = e.clientY;
+    this.elementStartX = element.x;
+    this.elementStartY = element.y;
+    this.dragThreshold = 5; // Píxeles de movimiento mínimo para activar drag
+    this.hasMoved = false;
+
+    // 🎯 ESCUCHAR MOVIMIENTO PARA DETECTAR SI ES CLIC O DRAG
+    this.boundPrepareDrag =
+      this.boundPrepareDrag || this.handleMouseMove.bind(this);
+    this.boundPrepareDragUp =
+      this.boundPrepareDragUp || this.handleMouseUp.bind(this);
+
+    document.addEventListener("mousemove", this.boundPrepareDrag, {
+      passive: false,
+      capture: true,
+    });
+    document.addEventListener("mouseup", this.boundPrepareDragUp);
+  }
+
+  static handleMouseMove(e) {
+    if (!this.pendingElement) return;
+
+    const deltaX = Math.abs(e.clientX - this.startX);
+    const deltaY = Math.abs(e.clientY - this.startY);
+    const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // 🎯 ACTIVAR DRAG SOLO SI HAY MOVIMIENTO SIGNIFICATIVO
+    if (totalMovement > this.dragThreshold && !this.hasMoved) {
+      this.hasMoved = true;
+      console.log("🎯 Activando drag - movimiento detectado:", totalMovement);
+      this.startDrag(e, this.pendingElement);
+    }
+  }
+
+  static handleMouseUp(e) {
+    if (!this.pendingElement) return;
+
+    // 🎯 SI NO HUBO MOVIMIENTO, ES SOLO UN CLIC
+    if (!this.hasMoved) {
+      console.log("✅ Solo clic detectado - sin activar drag");
+      // No hacer nada más, la selección ya se hizo en mousedown
+    }
+
+    // 🧹 LIMPIAR
+    this.pendingElement = null;
+    this.hasMoved = false;
+    document.removeEventListener("mousemove", this.boundPrepareDrag);
+    document.removeEventListener("mouseup", this.boundPrepareDragUp);
+  }
+
+  static startDrag(e, element) {
+    e.preventDefault();
+    this.lastPosition = null;
+    this.lastMove = 0;
+    this.lastTimestamp = 0;
+    this.mouseVelocityX = 0;
+    this.mouseVelocityY = 0;
+    const canvas = document.getElementById("canvas");
+    if (canvas) {
+      this.canvasWidth = canvas.offsetWidth;
+      this.canvasHeight = canvas.offsetHeight;
+      canvas.classList.add("dragging");
+    }
+    const elementDom = document.getElementById(element.id);
+    if (elementDom) {
+      this.lastElementDimension[element.id] = {
+        width: elementDom.offsetWidth,
+        height: elementDom.offsetHeight,
+      };
+      elementDom.style.cursor = "grabbing";
+      elementDom.classList.add("dragging");
+      elementDom.style.willChange = "transform, left, top";
+    }
+    this.isDragging = true;
+    this.currentElement = element;
+    this.lastMouseX = e.clientX;
+    this.lastMouseY = e.clientY;
+    this.lastTimestamp = performance.now();
+    this.mouseVelocityX = 0;
+    this.mouseVelocityY = 0;
+    this.frameCount = 0;
+    this.boundDrag = this.boundDrag || this.drag.bind(this);
+    this.boundStopDrag = this.boundStopDrag || this.stopDrag.bind(this);
+
+    document.addEventListener("mousemove", this.boundDrag, {
+      passive: false,
+      capture: true,
+    });
+
+    document.addEventListener("mouseup", this.boundStopDrag);
+    if (!this.isAnimationFrameRequested) {
+      this.isAnimationFrameRequested = true;
+      requestAnimationFrame(() => this.updateDragPosition());
+    }
+  }
+  static lastMouseX = 0;
+  static lastMouseY = 0;
+  static isAnimationFrameRequested = false;
+  static mouseVelocityX = 0;
+  static mouseVelocityY = 0;
+  static lastTimestamp = 0;
+
+  static drag(e) {
+    if (!this.isDragging || !this.currentElement) return;
+    e.preventDefault();
+    const now = performance.now();
+    const isTouchEvent = e.type.startsWith("touch");
+    const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY;
+    const deltaX = clientX - this.startX;
+    const deltaY = clientY - this.startY;
+    if (this.lastTimestamp > 0) {
+      const dt = now - this.lastTimestamp;
+      if (dt > 0) {
+        this.mouseVelocityX = (clientX - this.lastMouseX) / dt;
+        this.mouseVelocityY = (clientY - this.lastMouseY) / dt;
+        this.lastPosition = { deltaX, deltaY };
+        this.lastMove = now;
+      }
+    }
+    this.lastTimestamp = now;
+    this.lastMouseX = clientX;
+    this.lastMouseY = clientY;
+    const elementDom = document.getElementById(this.currentElement.id);
+    if (elementDom && this.currentElement) {
+      const deltaX = this.lastMouseX - this.startX;
+      const deltaY = this.lastMouseY - this.startY;
+      this.currentElement.x = this.elementStartX + deltaX;
+      this.currentElement.y = this.elementStartY + deltaY;
+      elementDom.style.left = this.currentElement.x + "px";
+      elementDom.style.top = this.currentElement.y + "px";
+    }
+    if (!this.isAnimationFrameRequested) {
+      this.isAnimationFrameRequested = true;
+      requestAnimationFrame(() => this.updateDragPosition());
+    }
+  }
+  static canvasWidth = 0;
+  static canvasHeight = 0;
+  static lastElementDimension = {};
+
+  static updateDragPosition() {
+    this.isAnimationFrameRequested = false;
+    if (!this.isDragging || !this.currentElement) return;
+    const now = performance.now();
+    const deltaX = this.lastMouseX - this.startX;
+    const deltaY = this.lastMouseY - this.startY;
+    let newX = this.elementStartX + deltaX;
+    let newY = this.elementStartY + deltaY;
+    if (this.lastMove && this.lastPosition) {
+      const timeElapsed = now - this.lastMove;
+      if (timeElapsed > 0 && timeElapsed < 100) {
+        const velocityX = (deltaX - this.lastPosition.deltaX) / timeElapsed;
+        const velocityY = (deltaY - this.lastPosition.deltaY) / timeElapsed;
+        const speedFactor = Math.min(
+          1.0,
+          Math.sqrt(velocityX * velocityX + velocityY * velocityY) * 10
+        );
+        const predictionFactor = 12 * speedFactor;
+        newX += velocityX * predictionFactor;
+        newY += velocityY * predictionFactor;
+      }
+    }
+    this.lastPosition = { deltaX, deltaY };
+    this.lastMove = now;
+    const elementId = this.currentElement.id;
+    const elementDom = document.getElementById(elementId);
+    if (elementDom) {
+      let elementWidth, elementHeight;
+      if (!this.lastElementDimension[elementId]) {
+        elementWidth = elementDom.offsetWidth;
+        elementHeight = elementDom.offsetHeight;
+        this.lastElementDimension[elementId] = {
+          width: elementWidth,
+          height: elementHeight,
+        };
+      } else {
+        elementWidth = this.lastElementDimension[elementId].width;
+        elementHeight = this.lastElementDimension[elementId].height;
+      }
+      if (this.canvasWidth === 0 || this.canvasHeight === 0) {
+        const canvas = document.getElementById("canvas");
+        if (canvas) {
+          this.canvasWidth = canvas.offsetWidth;
+          this.canvasHeight = canvas.offsetHeight;
+        }
+      }
+      const isAtBoundary =
+        newX <= 0 ||
+        newY <= 0 ||
+        newX >= this.canvasWidth - elementWidth ||
+        newY >= this.canvasHeight - elementHeight;
+      newX = Math.max(0, Math.min(newX, this.canvasWidth - elementWidth));
+      newY = Math.max(0, Math.min(newY, this.canvasHeight - elementHeight));
+      if (isAtBoundary && !elementDom.classList.contains("boundary-reached")) {
+        elementDom.classList.add("boundary-reached");
+        setTimeout(() => {
+          if (elementDom) {
+            elementDom.classList.remove("boundary-reached");
+          }
+        }, 150);
+      }
+      elementDom.style.willChange = "transform, left, top";
+      elementDom.style.left = newX + "px";
+      elementDom.style.top = newY + "px";
+      elementDom.style.transform = "translate3d(0,0,0)";
+      this.currentElement.x = newX;
+      this.currentElement.y = newY;
+      if (this.frameCount === undefined) this.frameCount = 0;
+      this.frameCount = (this.frameCount + 1) % 3;
+      if (this.frameCount === 0 && typeof ConnectionManager !== "undefined") {
+        ConnectionManager.updateConnections();
+      }
+      if (this.isDragging) {
+        this.isAnimationFrameRequested = true;
+        requestAnimationFrame(() => this.updateDragPosition());
+      }
+    }
+  }
+
+  static stopDrag(e) {
+    if (!this.isDragging || !this.currentElement) return;
+    this.isAnimationFrameRequested = false;
+    this.lastPosition = null;
+    this.lastMove = 0;
+    this.mouseVelocityX = 0;
+    this.mouseVelocityY = 0;
+    if (this.lastMouseX && this.lastMouseY) {
+      const canvas = document.getElementById("canvas");
+      const elementDom = document.getElementById(this.currentElement.id);
+      if (canvas && elementDom) {
+        const elementWidth = elementDom.offsetWidth;
+        const elementHeight = elementDom.offsetHeight;
+        const canvasWidth = canvas.offsetWidth;
+        const canvasHeight = canvas.offsetHeight;
+        this.currentElement.x = Math.max(
+          0,
+          Math.min(this.currentElement.x, canvasWidth - elementWidth)
+        );
+        this.currentElement.y = Math.max(
+          0,
+          Math.min(this.currentElement.y, canvasHeight - elementHeight)
+        );
+        elementDom.style.willChange = "auto";
+        if (typeof ConnectionManager !== "undefined") {
+          ConnectionManager.updateConnections();
+        }
+      }
+    }
+    PersistenceManager.safeMarkAsChanged();
+    const elementDom = document.getElementById(this.currentElement.id);
+    if (elementDom) {
+      elementDom.style.cursor = "move";
+      elementDom.classList.remove("dragging");
+      elementDom.classList.remove("boundary-reached");
+      elementDom.style.transform = "";
+    }
+    const canvas = document.getElementById("canvas");
+    if (canvas) {
+      canvas.classList.remove("dragging");
+    }
+    document.removeEventListener("mousemove", this.boundDrag);
+    document.removeEventListener("mouseup", this.boundStopDrag);
+    if (typeof ConnectionManager !== "undefined") {
+      ConnectionManager.updateConnections();
+    }
+    this.isDragging = false;
+    const finalElement = this.currentElement;
+    if (window.BLOCK_ALL_SOCKET_IO) {
+      console.log("🚫 cambioInstantaneo BLOQUEADO - modo seguro activo");
+      return;
+    }
+    if (
+      finalElement &&
+      pizarraColaborativa &&
+      pizarraColaborativa.isConnected &&
+      pizarraColaborativa.usuarioInfo
+    ) {
+      pizarraColaborativa.socket.emit("cambioInstantaneo", {
+        tipo: "elementoMovido",
+        elemento: {
+          id: finalElement.id,
+          x: finalElement.x,
+          y: finalElement.y,
+          type: finalElement.type,
+        },
+        salaId: pizarraColaborativa.salaId,
+        usuario: pizarraColaborativa.usuarioInfo,
+        timestamp: Date.now(),
+      });
+    }
+    this.currentElement = null;
+    this.lastMouseX = null;
+    this.lastMouseY = null;
+  }
+}
+
+class PropertiesManager {
+  static showPropertiesReadOnly(element) {
+    const content = document.getElementById("properties-content");
+    let actualElement = element;
+    if (element && element.id && !element.type) {
+      actualElement =
+        DiagramManager.elements.get(element.id) ||
+        DiagramManager.getClass(element.id) ||
+        element;
+    }
+    if (
+      actualElement &&
+      (actualElement.type === "class" ||
+        actualElement.classList?.contains("uml-class"))
+    ) {
+      content.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="fas fa-eye me-2"></i>Modo visualización - Los cambios se aplicarán cuando edites un valor
+                        </div>
+                        <div class="property-group">
+                            <label>Nombre de la Clase</label>
+                            <input type="text" class="form-control" value="${
+                              actualElement.name || "Sin nombre"
+                            }" 
+                                   onchange="window.aiChatbot ? window.aiChatbot.editClassProperties(document.getElementById('${
+                                     actualElement.id || element.id
+                                   }'), 'name', this.value) : void(0)" 
+                                   placeholder="Haz cambios para sincronizar">
+                        </div>
+                        <div class="property-group">
+                            <label>Estereotipo</label>
+                            <select class="form-select" onchange="window.aiChatbot ? window.aiChatbot.editClassProperties(document.getElementById('${
+                              actualElement.id || element.id
+                            }'), 'stereotype', this.value) : void(0)">
+                                <option value="" ${
+                                  !actualElement.stereotype ? "selected" : ""
+                                }>Ninguno</option>
+                                <option value="interface" ${
+                                  actualElement.stereotype === "interface"
+                                    ? "selected"
+                                    : ""
+                                }>Interface</option>
+                                <option value="abstract" ${
+                                  actualElement.stereotype === "abstract"
+                                    ? "selected"
+                                    : ""
+                                }>Abstract</option>
+                                <option value="entity" ${
+                                  actualElement.stereotype === "entity"
+                                    ? "selected"
+                                    : ""
+                                }>Entity</option>
+                                <option value="controller" ${
+                                  actualElement.stereotype === "controller"
+                                    ? "selected"
+                                    : ""
+                                }>Controller</option>
+                            </select>
+                        </div>
+                        <div class="property-group">
+                            <label>Visibilidad</label>
+                            <select class="form-select" onchange="window.aiChatbot ? window.aiChatbot.editClassProperties(document.getElementById('${
+                              actualElement.id || element.id
+                            }'), 'visibility', this.value) : void(0)">
+                                <option value="public" ${
+                                  actualElement.visibility === "public"
+                                    ? "selected"
+                                    : ""
+                                }>Public</option>
+                                <option value="private" ${
+                                  actualElement.visibility === "private"
+                                    ? "selected"
+                                    : ""
+                                }>Private</option>
+                                <option value="protected" ${
+                                  actualElement.visibility === "protected"
+                                    ? "selected"
+                                    : ""
+                                }>Protected</option>
+                                <option value="package" ${
+                                  actualElement.visibility === "package"
+                                    ? "selected"
+                                    : ""
+                                }>Package</option>
+                            </select>
+                        </div>
+                        <div class="property-group">
+                            <label>Posición</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label small">X:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${
+                                      actualElement.x || 0
+                                    }" 
+                                           onchange="window.aiChatbot ? window.aiChatbot.editClassProperties(document.getElementById('${
+                                             actualElement.id || element.id
+                                           }'), 'x', parseInt(this.value)) : void(0)">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Y:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${
+                                      actualElement.y || 0
+                                    }" 
+                                           onchange="window.aiChatbot ? window.aiChatbot.editClassProperties(document.getElementById('${
+                                             actualElement.id || element.id
+                                           }'), 'y', parseInt(this.value)) : void(0)">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <label>Atributos (${
+                              actualElement.attributes
+                                ? actualElement.attributes.length
+                                : 0
+                            })</label>
+                            <div class="small text-muted">Usa el modo edición completo para modificar atributos</div>
+                        </div>
+                        <div class="property-group">
+                            <label>Métodos (${
+                              actualElement.methods
+                                ? actualElement.methods.length
+                                : 0
+                            })</label>
+                            <div class="small text-muted">Usa el modo edición completo para modificar métodos</div>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button class="btn btn-primary btn-sm" onclick="PropertiesManager.showProperties(DiagramManager.getClass('${
+                              actualElement.id || element.id
+                            }') || DiagramManager.elements.get('${
+        actualElement.id || element.id
+      }'))">
+                                <i class="fas fa-edit me-1"></i> Modo Edición Completa
+                            </button>
+                        </div>
+                    `;
+    }
+
+    document.getElementById("properties-panel").style.display = "block";
+  }
+
+  static showProperties(element) {
+    const content = document.getElementById("properties-content");
+    if (element.type === "class") {
+      content.innerHTML = `
+                        <div class="property-group">
+                            <label>Nombre de la Clase</label>
+                            <input type="text" class="form-control" value="${
+                              element.name
+                            }" 
+                                   onchange="DiagramManager.validateAndUpdateElementName('${
+                                     element.id
+                                   }', this.value)" 
+                                   onblur="this.value = DiagramManager.getClass('${
+                                     element.id
+                                   }').name">
+                        </div>
+                        <div class="property-group">
+                            <label>Estereotipo</label>
+                            <select class="form-select" onchange="DiagramManager.getClass('${
+                              element.id
+                            }').stereotype = this.value; DiagramManager.getClass('${
+        element.id
+      }').updateDisplay()">
+                                <option value="" ${
+                                  !element.stereotype ? "selected" : ""
+                                }>Ninguno</option>
+                                <option value="interface" ${
+                                  element.stereotype === "interface"
+                                    ? "selected"
+                                    : ""
+                                }>Interface</option>
+                                <option value="abstract" ${
+                                  element.stereotype === "abstract"
+                                    ? "selected"
+                                    : ""
+                                }>Abstract</option>
+                                <option value="entity" ${
+                                  element.stereotype === "entity"
+                                    ? "selected"
+                                    : ""
+                                }>Entity</option>
+                                <option value="controller" ${
+                                  element.stereotype === "controller"
+                                    ? "selected"
+                                    : ""
+                                }>Controller</option>
+                            </select>
+                        </div>
+                        <div class="property-group">
+                            <label>Visibilidad</label>
+                            <select class="form-select" onchange="DiagramManager.getClass('${
+                              element.id
+                            }').visibility = this.value; DiagramManager.getClass('${
+        element.id
+      }').updateDisplay()">
+                                <option value="public" ${
+                                  element.visibility === "public"
+                                    ? "selected"
+                                    : ""
+                                }>Public</option>
+                                <option value="private" ${
+                                  element.visibility === "private"
+                                    ? "selected"
+                                    : ""
+                                }>Private</option>
+                                <option value="protected" ${
+                                  element.visibility === "protected"
+                                    ? "selected"
+                                    : ""
+                                }>Protected</option>
+                                <option value="package" ${
+                                  element.visibility === "package"
+                                    ? "selected"
+                                    : ""
+                                }>Package</option>
+                            </select>
+                        </div>
+                                              
+                        <div class="property-group">
+                            <label>Relaciones</label>
+                            <button class="btn btn-sm btn-outline-info w-100 mt-2" onclick="ConnectionManager.showConnectionDialog('${
+                              element.id
+                            }')">
+                                <i class="fas fa-link me-1"></i> Crear Relación
+                            </button>
+                        </div>
+                    `;
+    } else if (element.type === "enum") {
+      content.innerHTML = `
+                        <div class="property-group">
+                            <label>Nombre de la Enumeración</label>
+                            <input type="text" class="form-control" value="${element.name}" 
+                                   onchange="DiagramManager.getEnum('${element.id}').name = this.value; DiagramManager.getEnum('${element.id}').updateDisplay()">
+                        </div>
+                        <div class="property-group">
+                            <label>Posición</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label small">X:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.x}" 
+                                           onchange="DiagramManager.getEnum('${element.id}').x = parseInt(this.value); DiagramManager.getEnum('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Y:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.y}" 
+                                           onchange="DiagramManager.getEnum('${element.id}').y = parseInt(this.value); DiagramManager.getEnum('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="property-group">
+                            <label>Valores (${element.values.length})</label>
+                            <button class="btn btn-sm btn-outline-primary w-100 mt-2" onclick="EnumManager.showAddDialog('${element.id}')">
+                                <i class="fas fa-plus me-1"></i> Agregar Valor
+                            </button>
+                        </div>
+                        <div class="property-group">
+                            <label>Relaciones</label>
+                            <button class="btn btn-sm btn-outline-info w-100 mt-2" onclick="ConnectionManager.showConnectionDialog('${element.id}')">
+                                <i class="fas fa-link me-1"></i> Crear Relación
+                            </button>
+                        </div>
+                    `;
+    } else if (element.type === "package") {
+      content.innerHTML = `
+                        <div class="property-group">
+                            <label>Nombre del Paquete</label>
+                            <input type="text" class="form-control" value="${element.name}" 
+                                   onchange="DiagramManager.elements.get('${element.id}').name = this.value; DiagramManager.elements.get('${element.id}').updateDisplay()">
+                        </div>
+                        <div class="property-group">
+                            <label>Descripción</label>
+                            <textarea class="form-control" rows="3" 
+                                      onchange="DiagramManager.elements.get('${element.id}').description = this.value; DiagramManager.elements.get('${element.id}').updateDisplay()">${element.description}</textarea>
+                        </div>
+                        <div class="property-group">
+                            <label>Posición</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label small">X:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.x}" 
+                                           onchange="DiagramManager.elements.get('${element.id}').x = parseInt(this.value); DiagramManager.elements.get('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Y:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.y}" 
+                                           onchange="DiagramManager.elements.get('${element.id}').y = parseInt(this.value); DiagramManager.elements.get('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+    } else if (element.type === "note") {
+      content.innerHTML = `
+                        <div class="property-group">
+                            <label>Contenido de la Nota</label>
+                            <textarea class="form-control" rows="5" 
+                                      onchange="DiagramManager.elements.get('${element.id}').text = this.value; DiagramManager.elements.get('${element.id}').updateDisplay()">${element.text}</textarea>
+                        </div>
+                        <div class="property-group">
+                            <label>Posición</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label small">X:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.x}" 
+                                           onchange="DiagramManager.elements.get('${element.id}').x = parseInt(this.value); DiagramManager.elements.get('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Y:</label>
+                                    <input type="number" class="form-control form-control-sm" value="${element.y}" 
+                                           onchange="DiagramManager.elements.get('${element.id}').y = parseInt(this.value); DiagramManager.elements.get('${element.id}').updatePosition(); ConnectionManager.updateConnections()">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+    }
+  }
+
+  static showEmpty() {
+    // 🛡️ PROTECCIÓN: No limpiar panel si hay elementos AI seleccionados
+    const aiSelectedElement = document.querySelector(".selected-element");
+    const isSelectingByAI = document.querySelector('[data-selecting="true"]');
+
+    if (aiSelectedElement || isSelectingByAI) {
+      console.log(
+        "🚫 PropertiesManager.showEmpty() bloqueado - elemento AI seleccionado"
+      );
+      return; // NO limpiar panel si hay selección de AI activa
+    }
+
+    const content = document.getElementById("properties-content");
+    content.innerHTML = `
+                    <div class="text-center text-muted p-4">
+                        <p>Selecciona un elemento</p>
+                    </div>
+                `;
+    console.log("✅ PropertiesManager.showEmpty() ejecutado");
+  }
+}
+
+class AttributeManager {
+  static getJavaReservedWords() {
+    return [
+      "abstract",
+      "assert",
+      "boolean",
+      "break",
+      "byte",
+      "case",
+      "catch",
+      "char",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "do",
+      "double",
+      "else",
+      "enum",
+      "extends",
+      "final",
+      "finally",
+      "float",
+      "for",
+      "goto",
+      "if",
+      "implements",
+      "import",
+      "instanceof",
+      "int",
+      "interface",
+      "long",
+      "native",
+      "new",
+      "package",
+      "private",
+      "protected",
+      "public",
+      "return",
+      "short",
+      "static",
+      "strictfp",
+      "super",
+      "switch",
+      "synchronized",
+      "this",
+      "throw",
+      "throws",
+      "transient",
+      "try",
+      "void",
+      "volatile",
+      "while",
+      "true",
+      "false",
+      "null",
+    ];
+  }
+
+  static validateAttributeName(name) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return {
+        valid: false,
+        message: "El nombre del atributo no puede estar vacío.",
+      };
+    }
+    if (trimmedName.length < 2) {
+      return {
+        valid: false,
+        message: "El nombre debe tener al menos 2 caracteres.",
+      };
+    }
+    if (trimmedName.length > 50) {
+      return {
+        valid: false,
+        message: "El nombre no puede exceder 50 caracteres.",
+      };
+    }
+    if (!/^[a-zA-Z_]/.test(trimmedName)) {
+      return {
+        valid: false,
+        message: "El nombre debe comenzar con una letra o guión bajo (_).",
+      };
+    }
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedName)) {
+      return {
+        valid: false,
+        message: "Solo se permiten letras, números y guiones bajos.",
+      };
+    }
+    if (this.getJavaReservedWords().includes(trimmedName.toLowerCase())) {
+      return {
+        valid: false,
+        message: `"${trimmedName}" es una palabra reservada de Java. Usa un nombre diferente.`,
+        suggestion: `${trimmedName}Value`,
+      };
+    }
+    return { valid: true };
+  }
+
+  static validateDefaultValue(value, type) {
+    if (!value || value.trim() === "") {
+      return { valid: true };
+    }
+    const trimmedValue = value.trim();
+    const cleanType = type.replace(/<.*>/g, "");
+    try {
+      switch (cleanType) {
+        case "int":
+        case "Integer":
+        case "byte":
+        case "Byte":
+        case "short":
+        case "Short":
+          if (!/^-?\d+$/.test(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Debe ser un número entero.`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "long":
+        case "Long":
+          if (!/^-?\d+[Ll]?$/.test(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Usa formato: 123L`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "float":
+        case "Float":
+          if (!/^-?\d*\.?\d+[fF]?$/.test(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Usa formato: 3.14f`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "double":
+        case "Double":
+          if (!/^-?\d*\.?\d+$/.test(trimmedValue) && trimmedValue !== "null") {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Usa formato: 3.14`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "boolean":
+        case "Boolean":
+          if (!["true", "false", "null"].includes(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Solo se acepta: true, false o null`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "char":
+        case "Character":
+          if (!/^'.*'$|^null$/.test(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para ${type}. Usa formato: 'a' o null`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+        case "String":
+          if (!/^".*"|^null$/.test(trimmedValue)) {
+            return {
+              valid: false,
+              message: `Valor inválido para String. Usa formato: "texto" o null`,
+              suggestion: this.getDefaultValueForType(type),
+            };
+          }
+          break;
+      }
+    } catch (e) {
+      return { valid: false, message: "Formato de valor inválido." };
+    }
+    return { valid: true };
+  }
+
+  static showAddDialog(classId) {
+    const html = `
+                    <div class="modal fade" id="attributeModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Agregar Atributo</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Nombre 
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Debe comenzar con letra o _, solo letras, números y _. No palabras reservadas de Java."></i>
+                                        </label>
+                                        <input type="text" 
+                                               class="form-control" 
+                                               id="attrName" 
+                                               placeholder="nombreAtributo"
+                                               oninput="AttributeManager.validateFieldInRealTime(this, 'name')"
+                                               onblur="AttributeManager.validateFieldOnBlur(this, 'name')">
+                                        <div class="invalid-feedback" id="attrName-feedback"></div>
+                                        <small class="form-text text-muted">Ejemplos: id, nombre, fechaCreacion</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Tipo 
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Selecciona el tipo de dato apropiado para tu atributo."></i>
+                                        </label>
+                                        <select class="form-select" id="attrType" onchange="AttributeManager.updateDefaultValue('attrType', 'attrDefault')">
+                                            ${AttributeManager.getDataTypes()
+                                              .map(
+                                                (type) =>
+                                                  `<option value="${type}"${
+                                                    type === "String"
+                                                      ? " selected"
+                                                      : ""
+                                                  }>${type}</option>`
+                                              )
+                                              .join("")}
+                                        </select>
+                                        <small class="form-text text-muted">El valor por defecto se actualizará automáticamente</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Visibilidad</label>
+                                        <select class="form-select" id="attrVisibility">
+                                            <option value="public">Public (+)</option>
+                                            <option value="private">Private (-)</option>
+                                            <option value="protected">Protected (#)</option>
+                                            <option value="package">Package (~)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="attrStatic">
+                                            <label class="form-check-label" for="attrStatic">Estático</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="attrPrimaryKey">
+                                            <label class="form-check-label" for="attrPrimaryKey">Llave Primaria (PK)</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Valor por defecto 
+                                            <span class="badge bg-secondary">Opcional</span>
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Puedes usar la sugerencia automática, escribir tu propio valor o dejarlo vacío."></i>
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="text" 
+                                                   class="form-control" 
+                                                   id="attrDefault" 
+                                                   placeholder="Sugerido: &quot;&quot;" 
+                                                   data-auto-generated="true" 
+                                                   value="&quot;&quot;"
+                                                   oninput="AttributeManager.validateFieldInRealTime(this, 'defaultValue')"
+                                                   onblur="AttributeManager.validateFieldOnBlur(this, 'defaultValue')">
+                                            <button class="btn btn-outline-secondary" 
+                                                    type="button" 
+                                                    onclick="AttributeManager.clearDefaultValueSuggestion('attrDefault')"
+                                                    data-bs-toggle="tooltip" 
+                                                    title="Limpiar y usar valor personalizado">
+                                                <i class="fas fa-eraser"></i>
+                                            </button>
+                                        </div>
+                                        <div class="invalid-feedback" id="attrDefault-feedback"></div>
+                                        <small class="form-text text-muted">
+                                            <i class="fas fa-lightbulb text-warning"></i> 
+                                            Se actualiza automáticamente según el tipo. 
+                                            <strong>Opcional:</strong> puedes dejarlo vacío.
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="AttributeManager.addAttribute('${classId}')">Agregar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("attributeModal")
+    );
+    modal.show();
+    setTimeout(() => {
+      AttributeManager.updateDefaultValue("attrType", "attrDefault");
+      const tooltipTriggerList = document.querySelectorAll(
+        '[data-bs-toggle="tooltip"]'
+      );
+      const tooltipList = [...tooltipTriggerList].map(
+        (tooltipTriggerEl) => new bootstrap.Tooltip(tooltipTriggerEl)
+      );
+    }, 100);
+    document
+      .getElementById("attributeModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static addAttribute(classId) {
+    const name = document.getElementById("attrName").value;
+    const type = document.getElementById("attrType").value;
+    const visibility = document.getElementById("attrVisibility").value;
+    const isStatic = document.getElementById("attrStatic").checked;
+    const isPrimaryKey = document.getElementById("attrPrimaryKey").checked;
+    const defaultValue = document.getElementById("attrDefault").value;
+    if (!name || !type) {
+      DiagramManager.showValidationMessage(
+        "El nombre y el tipo son obligatorios",
+        "error"
+      );
+      return;
+    }
+    const nameValidation = AttributeManager.validateAttributeName(name);
+    if (!nameValidation.valid) {
+      DiagramManager.showValidationMessage(nameValidation.message, "error");
+      if (nameValidation.suggestion) {
+        setTimeout(() => {
+          DiagramManager.showValidationMessage(
+            `💡 Sugerencia: Prueba con "${nameValidation.suggestion}"`,
+            "info"
+          );
+        }, 2000);
+      }
+      return;
+    }
+    if (defaultValue && defaultValue.trim() !== "") {
+      const defaultValidation = AttributeManager.validateDefaultValue(
+        defaultValue,
+        type
+      );
+      if (!defaultValidation.valid) {
+        DiagramManager.showValidationMessage(
+          defaultValidation.message,
+          "error"
+        );
+        if (defaultValidation.suggestion) {
+          setTimeout(() => {
+            DiagramManager.showValidationMessage(
+              `💡 Sugerencia: Usa "${defaultValidation.suggestion}"`,
+              "info"
+            );
+          }, 2000);
+        }
+        return;
+      }
+    }
+    const umlClass = DiagramManager.getClass(classId);
+    const uniqueValidation = umlClass.validateUniqueAttribute(name, type);
+    if (!uniqueValidation.valid) {
+      DiagramManager.showValidationMessage(uniqueValidation.message, "error");
+      return;
+    }
+    const attribute = {
+      name: name.trim(),
+      type,
+      visibility,
+      isStatic,
+      isPrimaryKey,
+      defaultValue:
+        defaultValue && defaultValue.trim() !== "" ? defaultValue.trim() : null,
+    };
+    umlClass.addAttribute(attribute);
+    bootstrap.Modal.getInstance(
+      document.getElementById("attributeModal")
+    ).hide();
+    PropertiesManager.showProperties(umlClass);
+    if (umlClass.attributes.length === 1 && !isPrimaryKey) {
+      setTimeout(() => {
+        DiagramManager.showValidationMessage(
+          "💡 Sugerencia: Considera marcar al menos un atributo como Llave Primaria (PK) para identificar la tabla.",
+          "info"
+        );
+      }, 1500);
+    }
+    DiagramManager.showValidationMessage(
+      isPrimaryKey
+        ? "Llave primaria agregada correctamente 🔑"
+        : "Atributo agregado correctamente",
+      "success"
+    );
+  }
+
+  static editAttribute(classId, index) {
+    const umlClass = DiagramManager.getClass(classId);
+    const attribute = umlClass.attributes[index];
+    const html = `
+                    <div class="modal fade" id="editAttributeModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Editar Atributo</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Nombre 
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Debe comenzar con letra o _, solo letras, números y _. No palabras reservadas de Java."></i>
+                                        </label>
+                                        <input type="text" 
+                                               class="form-control" 
+                                               id="editAttrName" 
+                                               value="${attribute.name}"
+                                               oninput="AttributeManager.validateFieldInRealTime(this, 'name')"
+                                               onblur="AttributeManager.validateFieldOnBlur(this, 'name')">
+                                        <div class="invalid-feedback" id="editAttrName-feedback"></div>
+                                        <small class="form-text text-muted">Ejemplos: id, nombre, fechaCreacion</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Tipo 
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Selecciona el tipo de dato apropiado para tu atributo."></i>
+                                        </label>
+                                        <select class="form-select" id="editAttrType" onchange="AttributeManager.updateDefaultValue('editAttrType', 'editAttrDefault')">
+                                            ${AttributeManager.getDataTypes()
+                                              .map(
+                                                (type) =>
+                                                  `<option value="${type}"${
+                                                    attribute.type === type
+                                                      ? " selected"
+                                                      : ""
+                                                  }>${type}</option>`
+                                              )
+                                              .join("")}
+                                        </select>
+                                        <small class="form-text text-muted">El valor por defecto se actualizará automáticamente</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Visibilidad</label>
+                                        <select class="form-select" id="editAttrVisibility">
+                                            <option value="public" ${
+                                              attribute.visibility === "public"
+                                                ? "selected"
+                                                : ""
+                                            }>Public (+)</option>
+                                            <option value="private" ${
+                                              attribute.visibility === "private"
+                                                ? "selected"
+                                                : ""
+                                            }>Private (-)</option>
+                                            <option value="protected" ${
+                                              attribute.visibility ===
+                                              "protected"
+                                                ? "selected"
+                                                : ""
+                                            }>Protected (#)</option>
+                                            <option value="package" ${
+                                              attribute.visibility === "package"
+                                                ? "selected"
+                                                : ""
+                                            }>Package (~)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="editAttrStatic" ${
+                                              attribute.isStatic
+                                                ? "checked"
+                                                : ""
+                                            }>
+                                            <label class="form-check-label" for="editAttrStatic">Estático</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="editAttrPrimaryKey" ${
+                                              attribute.isPrimaryKey
+                                                ? "checked"
+                                                : ""
+                                            }>
+                                            <label class="form-check-label" for="editAttrPrimaryKey">Llave Primaria (PK)</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Valor por defecto 
+                                            <span class="badge bg-secondary">Opcional</span>
+                                            <i class="fas fa-info-circle text-muted" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Puedes usar la sugerencia automática, escribir tu propio valor o dejarlo vacío."></i>
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="text" 
+                                                   class="form-control" 
+                                                   id="editAttrDefault" 
+                                                   value="${
+                                                     attribute.defaultValue ||
+                                                     ""
+                                                   }" 
+                                                   placeholder="Sugerido: ${AttributeManager.getDefaultValueForType(
+                                                     attribute.type
+                                                   )}"
+                                                   oninput="AttributeManager.validateFieldInRealTime(this, 'defaultValue')"
+                                                   onblur="AttributeManager.validateFieldOnBlur(this, 'defaultValue')">
+                                            <button class="btn btn-outline-secondary" 
+                                                    type="button" 
+                                                    onclick="AttributeManager.clearDefaultValueSuggestion('editAttrDefault')"
+                                                    data-bs-toggle="tooltip" 
+                                                    title="Limpiar y usar valor personalizado">
+                                                <i class="fas fa-eraser"></i>
+                                            </button>
+                                        </div>
+                                        <div class="invalid-feedback" id="editAttrDefault-feedback"></div>
+                                        <small class="form-text text-muted">
+                                            <i class="fas fa-lightbulb text-warning"></i> 
+                                            Se actualiza automáticamente cuando cambies el tipo. 
+                                            <strong>Opcional:</strong> puedes dejarlo vacío.
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="AttributeManager.updateAttribute('${classId}', ${index})">Actualizar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("editAttributeModal")
+    );
+    modal.show();
+    setTimeout(() => {
+      const defaultInput = document.getElementById("editAttrDefault");
+      const typeSelect = document.getElementById("editAttrType");
+      if (defaultInput && typeSelect) {
+        const suggestedDefault = AttributeManager.getDefaultValueForType(
+          typeSelect.value
+        );
+        defaultInput.placeholder = `Sugerido: ${suggestedDefault}`;
+      }
+      const tooltipTriggerList = document.querySelectorAll(
+        '[data-bs-toggle="tooltip"]'
+      );
+      const tooltipList = [...tooltipTriggerList].map(
+        (tooltipTriggerEl) => new bootstrap.Tooltip(tooltipTriggerEl)
+      );
+    }, 100);
+    document
+      .getElementById("editAttributeModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static updateAttribute(classId, index) {
+    const name = document.getElementById("editAttrName").value;
+    const type = document.getElementById("editAttrType").value;
+    const visibility = document.getElementById("editAttrVisibility").value;
+    const isStatic = document.getElementById("editAttrStatic").checked;
+    const isPrimaryKey = document.getElementById("editAttrPrimaryKey").checked;
+    const defaultValue = document.getElementById("editAttrDefault").value;
+    if (!name || !type) {
+      DiagramManager.showValidationMessage(
+        "El nombre y el tipo son obligatorios",
+        "error"
+      );
+      return;
+    }
+    const nameValidation = AttributeManager.validateAttributeName(name);
+    if (!nameValidation.valid) {
+      DiagramManager.showValidationMessage(nameValidation.message, "error");
+      if (nameValidation.suggestion) {
+        setTimeout(() => {
+          DiagramManager.showValidationMessage(
+            `💡 Sugerencia: Prueba con "${nameValidation.suggestion}"`,
+            "info"
+          );
+        }, 2000);
+      }
+      return;
+    }
+    if (defaultValue && defaultValue.trim() !== "") {
+      const defaultValidation = AttributeManager.validateDefaultValue(
+        defaultValue,
+        type
+      );
+      if (!defaultValidation.valid) {
+        DiagramManager.showValidationMessage(
+          defaultValidation.message,
+          "error"
+        );
+        if (defaultValidation.suggestion) {
+          setTimeout(() => {
+            DiagramManager.showValidationMessage(
+              `💡 Sugerencia: Usa "${defaultValidation.suggestion}"`,
+              "info"
+            );
+          }, 2000);
+        }
+        return;
+      }
+    }
+    const umlClass = DiagramManager.getClass(classId);
+    const currentAttribute = umlClass.attributes[index];
+    const nameChanged = name.trim() !== currentAttribute.name;
+    const typeChanged = type !== currentAttribute.type;
+    if (nameChanged || typeChanged) {
+      const uniqueValidation = umlClass.validateUniqueAttribute(
+        name,
+        type,
+        index
+      );
+      if (!uniqueValidation.valid) {
+        DiagramManager.showValidationMessage(uniqueValidation.message, "error");
+        return;
+      }
+    }
+    umlClass.attributes[index] = {
+      name: name.trim(),
+      type,
+      visibility,
+      isStatic,
+      isPrimaryKey,
+      defaultValue:
+        defaultValue && defaultValue.trim() !== "" ? defaultValue.trim() : null,
+    };
+    umlClass.updateDisplay();
+    bootstrap.Modal.getInstance(
+      document.getElementById("editAttributeModal")
+    ).hide();
+    PropertiesManager.showProperties(umlClass);
+    PersistenceManager.markAsChanged();
+    DiagramManager.showValidationMessage(
+      isPrimaryKey
+        ? "Llave primaria actualizada correctamente 🔑"
+        : "Atributo actualizado correctamente",
+      "success"
+    );
+  }
+
+  static deleteAttribute(classId, index) {
+    if (confirm("¿Estás seguro de que quieres eliminar este atributo?")) {
+      const umlClass = DiagramManager.getClass(classId);
+      if (umlClass) {
+        umlClass.removeAttribute(index);
+        PropertiesManager.showProperties(umlClass);
+      }
+    }
+  }
+
+  static getDefaultValueForType(dataType) {
+    const defaults = {
+      String: '""',
+      int: "0",
+      Integer: "0",
+      boolean: "false",
+      Boolean: "false",
+      double: "0.0",
+      Double: "0.0",
+      float: "0.0f",
+      Float: "0.0f",
+      char: "'\\0'",
+      Character: "'\\0'",
+      byte: "0",
+      Byte: "0",
+      short: "0",
+      Short: "0",
+      long: "0L",
+      Long: "0L",
+      Date: "null",
+      LocalDate: "null",
+      LocalDateTime: "null",
+      BigDecimal: "null",
+      BigInteger: "null",
+      List: "null",
+      ArrayList: "new ArrayList<>()",
+      Set: "null",
+      HashSet: "new HashSet<>()",
+      Map: "null",
+      HashMap: "new HashMap<>()",
+      Collection: "null",
+      Object: "null",
+    };
+    return defaults[dataType] || "null";
+  }
+
+  static getDataTypes() {
+    return [
+      "String",
+      "int",
+      "Integer",
+      "boolean",
+      "Boolean",
+      "double",
+      "Double",
+      "float",
+      "Float",
+      "char",
+      "Character",
+      "byte",
+      "Byte",
+      "short",
+      "Short",
+      "long",
+      "Long",
+      "Date",
+      "LocalDate",
+      "LocalDateTime",
+      "BigDecimal",
+      "BigInteger",
+      "List<T>",
+      "ArrayList<T>",
+      "Set<T>",
+      "HashSet<T>",
+      "Map<K,V>",
+      "HashMap<K,V>",
+      "Collection<T>",
+      "Object",
+    ];
+  }
+
+  static updateDefaultValue(typeSelectId, defaultInputId) {
+    const typeSelect = document.getElementById(typeSelectId);
+    const defaultInput = document.getElementById(defaultInputId);
+    if (typeSelect && defaultInput) {
+      const selectedType = typeSelect.value;
+      const suggestedDefault =
+        AttributeManager.getDefaultValueForType(selectedType);
+      const currentValue = defaultInput.value;
+      const wasAutoGenerated = defaultInput.dataset.autoGenerated === "true";
+      const isEmpty = !currentValue || currentValue.trim() === "";
+      if (isEmpty || wasAutoGenerated) {
+        defaultInput.value = suggestedDefault;
+        defaultInput.dataset.autoGenerated = "true";
+      }
+      defaultInput.placeholder = `Sugerido: ${suggestedDefault}`;
+      if (!defaultInput.dataset.listenerAdded) {
+        defaultInput.addEventListener("input", function () {
+          if (this.value !== suggestedDefault) {
+            this.dataset.autoGenerated = "false";
+          }
+        });
+        defaultInput.addEventListener("focus", function () {
+          this.setAttribute(
+            "title",
+            `Sugerencia para ${selectedType}: ${suggestedDefault}\n` +
+              "Puedes dejar vacío, usar la sugerencia o escribir tu propio valor."
+          );
+        });
+        defaultInput.dataset.listenerAdded = "true";
+      }
+      if (currentValue && currentValue.trim() !== "") {
+        const validation = this.validateDefaultValue(
+          currentValue,
+          selectedType
+        );
+        if (!validation.valid) {
+          defaultInput.style.borderColor = "#dc3545";
+          defaultInput.setAttribute("title", validation.message);
+        } else {
+          defaultInput.style.borderColor = "";
+          defaultInput.removeAttribute("title");
+        }
+      }
+    }
+  }
+
+  static clearDefaultValueSuggestion(inputId) {
+    const input = document.getElementById(inputId);
+    if (input && input.dataset.autoGenerated === "true") {
+      input.value = "";
+      input.dataset.autoGenerated = "false";
+      input.placeholder = "Valor personalizado (opcional)";
+    }
+  }
+
+  static validateFieldInRealTime(field, fieldType) {
+    const value = field.value;
+    const feedbackElement = document.getElementById(field.id + "-feedback");
+    if (!feedbackElement) return;
+    let validation = { valid: true };
+    if (fieldType === "name" && value.trim()) {
+      validation = AttributeManager.validateAttributeName(value);
+    } else if (fieldType === "defaultValue" && value.trim()) {
+      const typeField = document.getElementById(
+        field.id.replace("Default", "Type").replace("edit", "")
+      );
+      if (typeField) {
+        validation = AttributeManager.validateDefaultValue(
+          value,
+          typeField.value
+        );
+      }
+    }
+    if (validation.valid) {
+      field.classList.remove("is-invalid");
+      field.classList.add("is-valid");
+      feedbackElement.textContent = "";
+    } else {
+      field.classList.remove("is-valid");
+      field.classList.add("is-invalid");
+      feedbackElement.textContent = validation.message;
+    }
+  }
+
+  static validateFieldOnBlur(field, fieldType) {
+    const value = field.value;
+    const feedbackElement = document.getElementById(field.id + "-feedback");
+    if (!feedbackElement) return;
+    if (!value.trim()) {
+      field.classList.remove("is-invalid", "is-valid");
+      feedbackElement.textContent = "";
+      return;
+    }
+    let validation = { valid: true };
+    if (fieldType === "name") {
+      validation = AttributeManager.validateAttributeName(value);
+    } else if (fieldType === "defaultValue") {
+      const typeField = document.getElementById(
+        field.id.replace("Default", "Type").replace("edit", "")
+      );
+      if (typeField) {
+        validation = AttributeManager.validateDefaultValue(
+          value,
+          typeField.value
+        );
+      }
+    }
+    if (validation.valid) {
+      field.classList.remove("is-invalid");
+      field.classList.add("is-valid");
+      feedbackElement.textContent = validation.valid ? "✓ Válido" : "";
+    } else {
+      field.classList.remove("is-valid");
+      field.classList.add("is-invalid");
+      feedbackElement.textContent = validation.message;
+      if (validation.suggestion) {
+        setTimeout(() => {
+          if (feedbackElement) {
+            feedbackElement.innerHTML =
+              validation.message +
+              `<br><small class="text-info"><i class="fas fa-lightbulb"></i> Sugerencia: ${validation.suggestion}</small>`;
+          }
+        }, 1000);
+      }
+    }
+  }
+}
+
+class MethodManager {
+  static showAddDialog(classId) {
+    const html = `
+                    <div class="modal fade" id="methodModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Agregar Método</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Nombre</label>
+                                            <input type="text" class="form-control" id="methodName" placeholder="nombreMetodo">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Tipo de retorno</label>
+                                            <input type="text" class="form-control" id="methodReturn" placeholder="void">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Visibilidad</label>
+                                        <select class="form-select" id="methodVisibility">
+                                            <option value="public">Public (+)</option>
+                                            <option value="private">Private (-)</option>
+                                            <option value="protected">Protected (#)</option>
+                                            <option value="package">Package (~)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="methodStatic">
+                                            <label class="form-check-label" for="methodStatic">Estático</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="methodAbstract">
+                                            <label class="form-check-label" for="methodAbstract">Abstracto</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Parámetros</label>
+                                        <div id="parametersContainer">
+                                            <div class="row parameter-row">
+                                                <div class="col-5">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="nombreParam">
+                                                </div>
+                                                <div class="col-5">
+                                                    <input type="text" class="form-control form-control-sm" placeholder="tipoParam">
+                                                </div>
+                                                <div class="col-2">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="MethodManager.addParameter()">
+                                            <i class="fas fa-plus"></i> Agregar Parámetro
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="MethodManager.addMethod('${classId}')">Agregar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(document.getElementById("methodModal"));
+    modal.show();
+    document
+      .getElementById("methodModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static addParameter() {
+    const container = document.getElementById("parametersContainer");
+    const paramDiv = document.createElement("div");
+    paramDiv.className = "row parameter-row mt-2";
+    paramDiv.innerHTML = `
+                    <div class="col-5">
+                        <input type="text" class="form-control form-control-sm" placeholder="nombreParam">
+                    </div>
+                    <div class="col-5">
+                        <input type="text" class="form-control form-control-sm" placeholder="tipoParam">
+                    </div>
+                    <div class="col-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+    container.appendChild(paramDiv);
+  }
+
+  static addMethod(classId) {
+    const name = document.getElementById("methodName").value;
+    const returnType = document.getElementById("methodReturn").value;
+    const visibility = document.getElementById("methodVisibility").value;
+    const isStatic = document.getElementById("methodStatic").checked;
+    const isAbstract = document.getElementById("methodAbstract").checked;
+    if (!name) {
+      alert("El nombre del método es obligatorio");
+      return;
+    }
+    const parameters = [];
+    const paramRows = document.querySelectorAll(
+      "#parametersContainer .parameter-row"
+    );
+    paramRows.forEach((row) => {
+      const inputs = row.querySelectorAll("input");
+      if (inputs.length >= 2) {
+        const nameInput = inputs[0];
+        const typeInput = inputs[1];
+        if (
+          nameInput &&
+          typeInput &&
+          nameInput.value.trim() &&
+          typeInput.value.trim()
+        ) {
+          parameters.push({
+            name: nameInput.value.trim(),
+            type: typeInput.value.trim(),
+          });
+        }
+      }
+    });
+    const method = {
+      name,
+      returnType: returnType || "void",
+      visibility,
+      isStatic,
+      isAbstract,
+      parameters: parameters || [],
+    };
+    const umlClass = DiagramManager.getClass(classId);
+    umlClass.addMethod(method);
+    bootstrap.Modal.getInstance(document.getElementById("methodModal")).hide();
+    PropertiesManager.showProperties(umlClass);
+  }
+
+  static editMethod(classId, index) {
+    const umlClass = DiagramManager.getClass(classId);
+    const method = umlClass.methods[index];
+    const parametersHtml =
+      method.parameters && method.parameters.length > 0
+        ? method.parameters
+            .map(
+              (param, i) => `
+                        <div class="row parameter-row ${i > 0 ? "mt-2" : ""}">
+                            <div class="col-5">
+                                <input type="text" class="form-control form-control-sm" value="${
+                                  param.name
+                                }">
+                            </div>
+                            <div class="col-5">
+                                <input type="text" class="form-control form-control-sm" value="${
+                                  param.type
+                                }">
+                            </div>
+                            <div class="col-2">
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `
+            )
+            .join("")
+        : '<div class="text-muted">No hay parámetros</div>';
+    const html = `
+                    <div class="modal fade" id="editMethodModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Editar Método</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Nombre</label>
+                                            <input type="text" class="form-control" id="editMethodName" value="${
+                                              method.name
+                                            }">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">Tipo de retorno</label>
+                                            <input type="text" class="form-control" id="editMethodReturn" value="${
+                                              method.returnType || ""
+                                            }">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Visibilidad</label>
+                                        <select class="form-select" id="editMethodVisibility">
+                                            <option value="public" ${
+                                              method.visibility === "public"
+                                                ? "selected"
+                                                : ""
+                                            }>Public (+)</option>
+                                            <option value="private" ${
+                                              method.visibility === "private"
+                                                ? "selected"
+                                                : ""
+                                            }>Private (-)</option>
+                                            <option value="protected" ${
+                                              method.visibility === "protected"
+                                                ? "selected"
+                                                : ""
+                                            }>Protected (#)</option>
+                                            <option value="package" ${
+                                              method.visibility === "package"
+                                                ? "selected"
+                                                : ""
+                                            }>Package (~)</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="editMethodStatic" ${
+                                              method.isStatic ? "checked" : ""
+                                            }>
+                                            <label class="form-check-label" for="editMethodStatic">Estático</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="editMethodAbstract" ${
+                                              method.isAbstract ? "checked" : ""
+                                            }>
+                                            <label class="form-check-label" for="editMethodAbstract">Abstracto</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Parámetros</label>
+                                        <div id="editParametersContainer">
+                                            ${
+                                              parametersHtml ||
+                                              '<div class="text-muted">No hay parámetros</div>'
+                                            }
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="MethodManager.addEditParameter()">
+                                            <i class="fas fa-plus"></i> Agregar Parámetro
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="MethodManager.updateMethod('${classId}', ${index})">Actualizar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("editMethodModal")
+    );
+    modal.show();
+    document
+      .getElementById("editMethodModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static addEditParameter() {
+    const container = document.getElementById("editParametersContainer");
+    const noParamsMessage = container.querySelector(".text-muted");
+    if (noParamsMessage) {
+      noParamsMessage.remove();
+    }
+    const paramDiv = document.createElement("div");
+    paramDiv.className = "row parameter-row mt-2";
+    paramDiv.innerHTML = `
+                    <div class="col-5">
+                        <input type="text" class="form-control form-control-sm" placeholder="nombreParam">
+                    </div>
+                    <div class="col-5">
+                        <input type="text" class="form-control form-control-sm" placeholder="tipoParam">
+                    </div>
+                    <div class="col-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.parentElement.remove()">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+    container.appendChild(paramDiv);
+  }
+
+  static updateMethod(classId, index) {
+    const name = document.getElementById("editMethodName").value;
+    const returnType = document.getElementById("editMethodReturn").value;
+    const visibility = document.getElementById("editMethodVisibility").value;
+    const isStatic = document.getElementById("editMethodStatic").checked;
+    const isAbstract = document.getElementById("editMethodAbstract").checked;
+    if (!name) {
+      alert("El nombre del método es obligatorio");
+      return;
+    }
+    const parameters = [];
+    const paramRows = document.querySelectorAll(
+      "#editParametersContainer .parameter-row"
+    );
+    paramRows.forEach((row) => {
+      const inputs = row.querySelectorAll("input");
+      if (inputs.length >= 2) {
+        const nameInput = inputs[0];
+        const typeInput = inputs[1];
+        if (
+          nameInput &&
+          typeInput &&
+          nameInput.value.trim() &&
+          typeInput.value.trim()
+        ) {
+          parameters.push({
+            name: nameInput.value.trim(),
+            type: typeInput.value.trim(),
+          });
+        }
+      }
+    });
+    const umlClass = DiagramManager.getClass(classId);
+    umlClass.methods[index] = {
+      name,
+      returnType: returnType || "void",
+      visibility,
+      isStatic,
+      isAbstract,
+      parameters: parameters || [],
+    };
+    umlClass.updateDisplay();
+    bootstrap.Modal.getInstance(
+      document.getElementById("editMethodModal")
+    ).hide();
+    PropertiesManager.showProperties(umlClass);
+    PersistenceManager.markAsChanged();
+  }
+
+  static deleteMethod(classId, index) {
+    if (confirm("¿Estás seguro de que quieres eliminar este método?")) {
+      const umlClass = DiagramManager.getClass(classId);
+      if (umlClass) {
+        umlClass.removeMethod(index);
+        PropertiesManager.showProperties(umlClass);
+      }
+    }
+  }
+}
+
+class EnumManager {
+  static showAddDialog(enumId) {
+    const html = `
+                    <div class="modal fade" id="enumValueModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Agregar Valor</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Valor</label>
+                                        <input type="text" class="form-control" id="enumValue" placeholder="VALOR_ENUM">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="EnumManager.addValue('${enumId}')">Agregar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("enumValueModal")
+    );
+    modal.show();
+    document
+      .getElementById("enumValueModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static addValue(enumId) {
+    const value = document.getElementById("enumValue").value;
+    if (!value) {
+      alert("El valor es obligatorio");
+      return;
+    }
+    const enumElement = DiagramManager.getEnum(enumId);
+    enumElement.addValue(value);
+    bootstrap.Modal.getInstance(
+      document.getElementById("enumValueModal")
+    ).hide();
+    PropertiesManager.showProperties(enumElement);
+  }
+
+  static editValue(enumId, index) {
+    const enumElement = DiagramManager.getEnum(enumId);
+    const value = enumElement.values[index];
+    const html = `
+                    <div class="modal fade" id="editEnumValueModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Editar Valor</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Valor</label>
+                                        <input type="text" class="form-control" id="editEnumValue" value="${value}">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="EnumManager.updateValue('${enumId}', ${index})">Actualizar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("editEnumValueModal")
+    );
+    modal.show();
+    document
+      .getElementById("editEnumValueModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static updateValue(enumId, index) {
+    const value = document.getElementById("editEnumValue").value;
+    if (!value) {
+      alert("El valor es obligatorio");
+      return;
+    }
+    const enumElement = DiagramManager.getEnum(enumId);
+    enumElement.values[index] = value;
+    enumElement.updateDisplay();
+    bootstrap.Modal.getInstance(
+      document.getElementById("editEnumValueModal")
+    ).hide();
+    PropertiesManager.showProperties(enumElement);
+    PersistenceManager.markAsChanged();
+  }
+
+  static deleteValue(enumId, index) {
+    if (confirm("¿Estás seguro de que quieres eliminar este valor?")) {
+      const enumElement = DiagramManager.getEnum(enumId);
+      if (enumElement) {
+        enumElement.removeValue(index);
+        PropertiesManager.showProperties(enumElement);
+      }
+    }
+  }
+
+  static normalizeForSpringBoot() {
+    try {
+      console.log("Iniciando normalización para Spring Boot...");
+
+      const elements = Array.from(this.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      }));
+      console.log("Elementos encontrados:", elements.length);
+
+      // Verificar si ConnectionManager está disponible
+      const connections =
+        typeof ConnectionManager !== "undefined" &&
+        ConnectionManager.connections
+          ? ConnectionManager.connections
+          : [];
+      console.log("Conexiones encontradas:", connections.length);
+
+      // Crear copia profunda para no modificar los originales
+      const normalizedElements = JSON.parse(JSON.stringify(elements));
+
+      // Paso 1: Asegurar que cada clase tenga una llave primaria
+      normalizedElements.forEach((element) => {
+        if (element.type === "class") {
+          this.ensurePrimaryKey(element);
+        }
+      });
+
+      // Paso 2: Analizar relaciones y agregar llaves foráneas
+      if (connections.length > 0) {
+        this.generateForeignKeysFromRelations(normalizedElements, connections);
+      }
+
+      console.log("Normalización completada exitosamente");
+      return {
+        elements: normalizedElements,
+        connections: connections,
+      };
+    } catch (error) {
+      console.error("Error en normalizeForSpringBoot:", error);
+      // En caso de error, devolver elementos sin normalizar
+      const elements = Array.from(this.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      }));
+      return {
+        elements: elements,
+        connections: [],
+      };
+    }
+  }
+
+  static ensurePrimaryKey(element) {
+    try {
+      if (!element.attributes) element.attributes = [];
+
+      // Verificar si ya tiene una llave primaria
+      const hasPrimaryKey = element.attributes.some((attr) => {
+        // Manejo seguro de diferentes formatos de atributos
+        if (typeof attr === "object" && attr !== null) {
+          return attr.isPrimaryKey === true;
+        } else if (typeof attr === "string") {
+          // Buscar la palabra clave PK en string
+          return (
+            attr.toLowerCase().includes("pk") ||
+            attr.toLowerCase().includes("primary")
+          );
+        }
+        return false;
+      });
+
+      if (!hasPrimaryKey) {
+        // Agregar llave primaria por defecto
+        const defaultPK = {
+          name: "id",
+          type: "Long",
+          visibility: "private",
+          isStatic: false,
+          isPrimaryKey: true,
+          isForeignKey: false,
+          isGenerated: true, // Marca que fue generada automáticamente
+          defaultValue: null,
+        };
+        element.attributes.unshift(defaultPK); // Agregar al inicio
+        console.log(
+          `PK generada automáticamente para ${element.name}: Long id`
+        );
+      }
+    } catch (error) {
+      console.error(`Error asegurando PK para ${element.name}:`, error);
+    }
+  }
+
+  static generateForeignKeysFromRelations(elements, connections) {
+    try {
+      // Crear mapa de elementos por ID para acceso rápido
+      const elementMap = new Map();
+      elements.forEach((el) => elementMap.set(el.id, el));
+
+      connections.forEach((connection) => {
+        try {
+          if (!connection.fromElement || !connection.toElement) return;
+
+          const fromEl = elementMap.get(connection.fromElement);
+          const toEl = elementMap.get(connection.toElement);
+
+          if (
+            !fromEl ||
+            !toEl ||
+            fromEl.type !== "class" ||
+            toEl.type !== "class"
+          )
+            return;
+
+          // Obtener llave primaria de la entidad referenciada
+          const referencedPK = this.getPrimaryKeyInfo(toEl);
+
+          // Analizar multiplicidad y tipo de relación
+          this.addForeignKeyBasedOnRelation(
+            fromEl,
+            toEl,
+            connection,
+            referencedPK
+          );
+        } catch (error) {
+          console.error(`Error procesando conexión:`, error);
+        }
+      });
+    } catch (error) {
+      console.error("Error en generateForeignKeysFromRelations:", error);
+    }
+  }
+
+  static getPrimaryKeyInfo(element) {
+    if (!element.attributes) return { type: "Long", name: "id" };
+
+    const pkAttr = element.attributes.find(
+      (attr) => typeof attr === "object" && attr.isPrimaryKey === true
+    );
+
+    return pkAttr
+      ? { type: pkAttr.type, name: pkAttr.name }
+      : { type: "Long", name: "id" };
+  }
+
+  static addForeignKeyBasedOnRelation(fromEl, toEl, connection, referencedPK) {
+    const { multiplicity, relationshipType } = connection;
+
+    console.log(
+      `Analizando relación: ${fromEl.name} -> ${toEl.name} (${multiplicity}, ${relationshipType})`
+    );
+
+    switch (relationshipType) {
+      case "association":
+        this.handleAssociation(fromEl, toEl, multiplicity, referencedPK);
+        break;
+      case "composition":
+        this.handleComposition(fromEl, toEl, referencedPK);
+        break;
+      case "aggregation":
+        this.handleAggregation(fromEl, toEl, multiplicity, referencedPK);
+        break;
+      case "inheritance":
+        this.handleInheritance(fromEl, toEl);
+        break;
+      // Las dependencias no generan FK
+    }
+  }
+
+  static handleAssociation(fromEl, toEl, multiplicity, referencedPK) {
+    if (this.isOneToMany(multiplicity)) {
+      // 1:N - FK va en el lado "muchos" (fromEl)
+      this.addForeignKey(fromEl, toEl, referencedPK, "ManyToOne");
+    } else if (this.isManyToOne(multiplicity)) {
+      // N:1 - FK va en el lado "muchos" (toEl)
+      this.addForeignKey(
+        toEl,
+        fromEl,
+        this.getPrimaryKeyInfo(fromEl),
+        "ManyToOne"
+      );
+    } else if (this.isOneToOne(multiplicity)) {
+      // 1:1 - FK puede ir en cualquier lado, la ponemos en fromEl
+      this.addForeignKey(fromEl, toEl, referencedPK, "OneToOne");
+    }
+    // N:N se maneja con tabla intermedia en el backend
+  }
+
+  static handleComposition(fromEl, toEl, referencedPK) {
+    // En composición, el hijo (toEl) depende del padre (fromEl)
+    this.addForeignKey(
+      toEl,
+      fromEl,
+      this.getPrimaryKeyInfo(fromEl),
+      "ManyToOne",
+      false
+    );
+  }
+
+  static handleAggregation(fromEl, toEl, multiplicity, referencedPK) {
+    // Similar a asociación
+    this.handleAssociation(fromEl, toEl, multiplicity, referencedPK);
+  }
+
+  static handleInheritance(fromEl, toEl) {
+    // Marcar herencia para el backend
+    fromEl.inheritance = {
+      strategy: "TABLE_PER_CLASS",
+      parentClass: toEl.name,
+    };
+    console.log(`Herencia: ${fromEl.name} extiende ${toEl.name}`);
+  }
+
+  static addForeignKey(
+    targetEl,
+    referencedEl,
+    referencedPK,
+    relationship,
+    nullable = true
+  ) {
+    if (!targetEl.attributes) targetEl.attributes = [];
+
+    const fkName = `${referencedEl.name.toLowerCase()}${
+      referencedPK.name.charAt(0).toUpperCase() + referencedPK.name.slice(1)
+    }`;
+
+    // Verificar si ya existe esta FK
+    const existingFK = targetEl.attributes.find(
+      (attr) => typeof attr === "object" && attr.name === fkName
+    );
+
+    if (!existingFK) {
+      const foreignKey = {
+        name: fkName,
+        type: referencedPK.type,
+        visibility: "private",
+        isStatic: false,
+        isPrimaryKey: false,
+        isForeignKey: true,
+        isGenerated: true, // Marca que fue generada automáticamente
+        referencedEntity: referencedEl.name,
+        referencedField: referencedPK.name,
+        relationship: relationship,
+        nullable: nullable,
+        defaultValue: null,
+      };
+
+      targetEl.attributes.push(foreignKey);
+      console.log(
+        `FK generada: ${targetEl.name}.${fkName} -> ${referencedEl.name}.${referencedPK.name}`
+      );
+    }
+  }
+
+  static isOneToMany(multiplicity) {
+    return (
+      multiplicity === "1..*" ||
+      multiplicity === "1..n" ||
+      multiplicity === "1,*" ||
+      multiplicity === "1,n"
+    );
+  }
+
+  static isManyToOne(multiplicity) {
+    return (
+      multiplicity === "*.1" ||
+      multiplicity === "n.1" ||
+      multiplicity === "*,1" ||
+      multiplicity === "n,1"
+    );
+  }
+
+  static isManyToMany(multiplicity) {
+    return (
+      multiplicity === "*..*" ||
+      multiplicity === "n..n" ||
+      multiplicity === "*,*" ||
+      multiplicity === "n,n" ||
+      multiplicity === "m,n"
+    );
+  }
+
+  static isOneToOne(multiplicity) {
+    return (
+      multiplicity === "1..1" ||
+      multiplicity === "1,1" ||
+      multiplicity === "1:1" ||
+      multiplicity === "1" ||
+      !multiplicity
+    );
+  }
+}
+
+class ConnectionManager {
+  static connections = [];
+  static isCreatingConnection = false;
+  static sourceElement = null;
+  static connectionType = null;
+  static editingConnectionId = null;
+
+  static init() {
+    const svg = document.getElementById("connections");
+    if (!svg) {
+      console.error("No se encontró el elemento SVG para las conexiones");
+      return;
+    }
+    document.addEventListener("click", (e) => {
+      if (
+        this.isCreatingConnection &&
+        e.target.closest(".uml-class, .uml-package, .uml-note")
+      ) {
+        const elementId = e.target.closest(
+          ".uml-class, .uml-package, .uml-note"
+        ).id;
+        if (elementId !== this.sourceElement.id) {
+          this.completeConnection(elementId);
+        }
+      } else if (this.isCreatingConnection) {
+        this.cancelConnectionCreation();
+      }
+    });
+  }
+
+  static createConnection(sourceId) {
+    const targetId = document.getElementById("targetElement").value;
+    const relationType = document.getElementById("relationType").value;
+    const sourceMultiplicity =
+      document.getElementById("sourceMultiplicity").value;
+    const targetMultiplicity =
+      document.getElementById("targetMultiplicity").value;
+    const label = document.getElementById("relationLabel").value;
+    if (!targetId) {
+      alert("Selecciona un elemento destino");
+      return;
+    }
+    const connection = {
+      id: `conn_${Date.now()}`,
+      source: sourceId,
+      target: targetId,
+      type: relationType,
+      sourceMultiplicity,
+      targetMultiplicity,
+      label,
+    };
+    this.connections.push(connection);
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionModal")
+    ).hide();
+    PersistenceManager.markAsChanged();
+  }
+
+  static startConnectionCreation(sourceElement, type) {
+    this.isCreatingConnection = true;
+    this.sourceElement = sourceElement;
+    this.connectionType = type;
+    document.body.classList.add("creating-connection");
+    document
+      .querySelectorAll(".uml-class, .uml-package, .uml-note")
+      .forEach((el) => {
+        if (el.id !== sourceElement.id) {
+          el.classList.add("connection-target");
+        }
+      });
+    const message = document.createElement("div");
+    message.id = "connection-message";
+    message.className = "connection-message";
+    message.innerHTML = `
+            <div class="alert alert-info position-fixed bottom-0 start-50 translate-middle-x mb-3">
+                <i class="fas fa-info-circle me-2"></i>
+                Selecciona un elemento destino para crear una relación de tipo <strong>${type}</strong>
+                <button class="btn btn-sm btn-outline-dark ms-3" onclick="ConnectionManager.cancelConnectionCreation()">
+                    Cancelar
+                </button>
+            </div>
+        `;
+    document.body.appendChild(message);
+  }
+
+  static completeConnection(targetId) {
+    this.isCreatingConnection = false;
+    document.body.classList.remove("creating-connection");
+    document.querySelectorAll(".connection-target").forEach((el) => {
+      el.classList.remove("connection-target");
+    });
+    document.getElementById("connection-message")?.remove();
+    this.showConnectionDetailsDialog(
+      this.sourceElement.id,
+      targetId,
+      this.connectionType
+    );
+    this.sourceElement = null;
+    this.connectionType = null;
+  }
+
+  static cancelConnectionCreation() {
+    this.isCreatingConnection = false;
+    document.body.classList.remove("creating-connection");
+    document.querySelectorAll(".connection-target").forEach((el) => {
+      el.classList.remove("connection-target");
+    });
+    document.getElementById("connection-message")?.remove();
+    this.sourceElement = null;
+    this.connectionType = null;
+  }
+
+  static showConnectionDialog(sourceId) {
+    const elements = Array.from(DiagramManager.elements.values()).filter(
+      (el) => el.id !== sourceId
+    );
+    if (elements.length === 0) {
+      alert("Necesitas al menos dos clases para crear una relación");
+      return;
+    }
+    const optionsHtml = elements
+      .map((el) => `<option value="${el.id}">${el.name}</option>`)
+      .join("");
+    const html = `
+            <div class="modal fade" id="connectionModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Crear Relación</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Elemento destino</label>
+                                <select class="form-select" id="targetElement">
+                                    <option value="">Seleccionar elemento...</option>
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de relación</label>
+                                <select class="form-select" id="relationType">
+                                    <option value="association">Asociación</option>
+                                    <option value="aggregation">Agregación</option>
+                                    <option value="composition">Composición</option>
+                                    <option value="inheritance">Herencia</option>
+                                    <option value="dependency">Dependencia</option>
+                                    <option value="implementation">Implementación</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                              <label class="form-label">Multiplicidad origen</label>
+                              <select class="form-select" id="sourceMultiplicity" title="Selecciona la multiplicidad">
+                                <option value="1">1</option>
+                                <option value="0..1">0..1</option>
+                                <option value="1..1">1..1</option>
+                                <option value="*">*</option>
+                                <option value="0..*">0..*</option>
+                                <option value="1..*">1..*</option>
+                              
+                              </select>
+                              <small class="form-text text-muted">Ejemplos: 1, 0..1, *, 1..*, 2..5</small>
+                            </div>
+
+                            <div class="mb-3">
+                              <label class="form-label">Multiplicidad destino</label>
+                              <select class="form-select" id="targetMultiplicity" title="Selecciona la multiplicidad">
+                                <option value="1">1</option>
+                                <option value="0..1">0..1</option>
+                                <option value="1..1">1..1</option>
+                                <option value="*">*</option>
+                                <option value="0..*">0..*</option>
+                                <option value="1..*">1..*</option>
+                              
+                              </select>
+                              <small class="form-text text-muted">Los símbolos UML se orientan automáticamente</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Etiqueta (opcional)</label>
+                                <input type="text" class="form-control" id="relationLabel" placeholder="relación">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="ConnectionManager.createConnection('${sourceId}')">Crear</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("connectionModal")
+    );
+    modal.show();
+    document
+      .getElementById("connectionModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static showConnectionDetailsDialog(sourceId, targetId, connectionType) {
+    const html = `
+            <div class="modal fade" id="connectionDetailsModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Detalles de la Relación</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de relación</label>
+                                <select class="form-select" id="detailsRelationType">
+                                    <option value="association" ${
+                                      connectionType === "association"
+                                        ? "selected"
+                                        : ""
+                                    }>Asociación - Línea sólida simple</option>
+                                    <option value="aggregation" ${
+                                      connectionType === "aggregation"
+                                        ? "selected"
+                                        : ""
+                                    }>Agregación - Diamante hueco + línea sólida</option>
+                                    <option value="composition" ${
+                                      connectionType === "composition"
+                                        ? "selected"
+                                        : ""
+                                    }>Composición - Diamante relleno + línea sólida</option>
+                                    <option value="inheritance" ${
+                                      connectionType === "inheritance"
+                                        ? "selected"
+                                        : ""
+                                    }>Herencia - Triángulo hueco + línea sólida</option>
+                                    <option value="dependency" ${
+                                      connectionType === "dependency"
+                                        ? "selected"
+                                        : ""
+                                    }>Dependencia - Flecha + línea punteada</option>
+                                    <option value="implementation" ${
+                                      connectionType === "implementation"
+                                        ? "selected"
+                                        : ""
+                                    }>Implementación - Triángulo hueco + línea punteada</option>
+                                </select>
+                            </div>
+                           <div class="mb-3">
+                            <label class="form-label">Multiplicidad origen</label>
+                            <select class="form-select" id="sourceMultiplicity" title="Selecciona la multiplicidad">
+                              <option value="1">1</option>
+                              <option value="0..1">0..1</option>
+                              <option value="1..1">1..1</option>
+                              <option value="*">*</option>
+                              <option value="0..*">0..*</option>
+                              <option value="1..*">1..*</option>
+
+                            </select>
+                            <small class="form-text text-muted">Ejemplos: 1, 0..1, *, 1..*, 2..5</small>
+                          </div>
+
+                          <div class="mb-3">
+                            <label class="form-label">Multiplicidad destino</label>
+                            <select class="form-select" id="targetMultiplicity" title="Selecciona la multiplicidad">
+                              <option value="1">1</option>
+                              <option value="0..1">0..1</option>
+                              <option value="1..1">1..1</option>
+                              <option value="*">*</option>
+                              <option value="0..*">0..*</option>
+                              <option value="1..*">1..*</option>
+
+                            </select>
+                            <small class="form-text text-muted">Los símbolos UML se orientan automáticamente</small>
+                          </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Etiqueta (opcional)</label>
+                                <input type="text" class="form-control" id="detailsRelationLabel" placeholder="relación">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary" onclick="ConnectionManager.finishConnectionCreation('${sourceId}', '${targetId}')">Crear Relación</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("connectionDetailsModal")
+    );
+    modal.show();
+    document
+      .getElementById("connectionDetailsModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static finishConnectionCreation(sourceId, targetId) {
+    const finalConnectionType = document.getElementById(
+      "detailsRelationType"
+    ).value;
+    const sourceMultiplicity = document
+      .getElementById("detailsSourceMultiplicity")
+      .value.trim();
+    const targetMultiplicity = document
+      .getElementById("detailsTargetMultiplicity")
+      .value.trim();
+    const label = document.getElementById("detailsRelationLabel").value;
+
+    // Mostrar un mensaje de ayuda sobre cómo funcionan las cardinalidades según el tipo de relación
+    if (
+      finalConnectionType === "association" &&
+      (sourceMultiplicity || targetMultiplicity)
+    ) {
+      const isSourceOne = this.isCardinalityOne(sourceMultiplicity);
+      const isTargetMany = this.isCardinalityMany(targetMultiplicity);
+      const isTargetOne = this.isCardinalityOne(targetMultiplicity);
+      const isSourceMany = this.isCardinalityMany(sourceMultiplicity);
+
+      if ((isSourceOne && isTargetMany) || (isTargetOne && isSourceMany)) {
+        NotificationManager.showToast(
+          "info",
+          'Según UML estándar, la flecha de navegabilidad se mostrará del lado "muchos" hacia el lado "uno".'
+        );
+      }
+    } else if (
+      (finalConnectionType === "composition" ||
+        finalConnectionType === "aggregation") &&
+      (sourceMultiplicity || targetMultiplicity)
+    ) {
+      NotificationManager.showToast(
+        "info",
+        'En UML estándar, el diamante de composición/agregación aparecerá en el lado "contenedor" o lado "uno" de la relación.'
+      );
+    }
+
+    if (this.editingConnectionId) {
+      const connectionIndex = this.connections.findIndex(
+        (c) => c.id === this.editingConnectionId
+      );
+      if (connectionIndex > -1) {
+        // Crear objeto temporal para calcular la orientación del marcador
+        const tempConnection = {
+          type: finalConnectionType,
+          sourceMultiplicity,
+          targetMultiplicity,
+        };
+        // Calcular orientación según UML
+        const markerOrientation = this.determineMarkerOrientation(
+          tempConnection,
+          finalConnectionType
+        );
+
+        this.connections[connectionIndex] = {
+          ...this.connections[connectionIndex],
+          type: finalConnectionType,
+          sourceMultiplicity,
+          targetMultiplicity,
+          label,
+          markerOrientation,
+        };
+      }
+      this.editingConnectionId = null;
+    } else if (sourceId && targetId) {
+      // Crear objeto temporal para calcular la orientación del marcador
+      const tempConnection = {
+        type: finalConnectionType,
+        sourceMultiplicity,
+        targetMultiplicity,
+      };
+      // Calcular orientación según UML
+      const markerOrientation = this.determineMarkerOrientation(
+        tempConnection,
+        finalConnectionType
+      );
+
+      const connection = {
+        id: `conn_${Date.now()}`,
+        source: sourceId,
+        target: targetId,
+        type: finalConnectionType,
+        sourceMultiplicity,
+        targetMultiplicity,
+        label,
+        markerOrientation,
+      };
+      this.connections.push(connection);
+    }
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionDetailsModal")
+    ).hide();
+    PersistenceManager.markAsChanged();
+  }
+
+  static createConnection(sourceId) {
+    const targetId = document.getElementById("targetElement").value;
+    const relationType = document.getElementById("relationType").value;
+    const sourceMultiplicity =
+      document.getElementById("sourceMultiplicity").value;
+    const targetMultiplicity =
+      document.getElementById("targetMultiplicity").value;
+    const label = document.getElementById("relationLabel").value;
+    if (!targetId) {
+      alert("Selecciona un elemento destino");
+      return;
+    }
+    const connection = {
+      id: `conn_${Date.now()}`,
+      source: sourceId,
+      target: targetId,
+      type: relationType,
+      sourceMultiplicity,
+      targetMultiplicity,
+      label,
+    };
+    this.connections.push(connection);
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionModal")
+    ).hide();
+  }
+
+  static updateConnections() {
+    const svg = document.getElementById("connections");
+    svg.innerHTML = `
+            <defs>
+                <!-- Flecha UML estándar para dependencia -->
+                <marker id="arrowhead" markerWidth="10" markerHeight="10" 
+                        refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0,0 L 10,5 L 0,10" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Flecha UML estándar para asociación dirección inversa -->
+                <marker id="arrowhead-rev" markerWidth="10" markerHeight="10" 
+                        refX="0" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 10,0 L 0,5 L 10,10" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Triángulo UML estándar para herencia (hueco) -->
+                <marker id="inheritance" markerWidth="12" markerHeight="12" 
+                        refX="0" refY="6" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0,6 L 12,0 L 12,12 Z" fill="white" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Triángulo UML estándar para herencia invertido -->
+                <marker id="inheritance-rev" markerWidth="12" markerHeight="12" 
+                        refX="12" refY="6" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 12,6 L 0,0 L 0,12 Z" fill="white" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Triángulo UML estándar para implementación (hueco) -->
+                <marker id="implementation" markerWidth="12" markerHeight="12" 
+                        refX="0" refY="6" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0,6 L 12,0 L 12,12 Z" fill="white" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Diamante UML estándar hueco para agregación -->
+                <marker id="aggregation" markerWidth="14" markerHeight="14" 
+                        refX="0" refY="7" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0,7 L 7,0 L 14,7 L 7,14 Z" fill="white" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Diamante UML estándar hueco para agregación invertido -->
+                <marker id="aggregation-rev" markerWidth="14" markerHeight="14" 
+                        refX="14" refY="7" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 14,7 L 7,0 L 0,7 L 7,14 Z" fill="white" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Diamante UML estándar relleno para composición -->
+                <marker id="composition" markerWidth="14" markerHeight="14" 
+                        refX="0" refY="7" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 0,7 L 7,0 L 14,7 L 7,14 Z" fill="#000000" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                
+                <!-- Diamante UML estándar relleno para composición invertido -->
+                <marker id="composition-rev" markerWidth="14" markerHeight="14" 
+                        refX="14" refY="7" orient="auto" markerUnits="strokeWidth">
+                    <path d="M 14,7 L 7,0 L 0,7 L 7,14 Z" fill="#000000" stroke="#000000" stroke-width="1.5" stroke-linejoin="miter"/>
+                </marker>
+                </marker>
+            </defs>
+        `;
+
+    this.connections.forEach((conn) => {
+      const sourceEl = document.getElementById(conn.source);
+      const targetEl = document.getElementById(conn.target);
+      if (sourceEl && targetEl) {
+        const sourceBounds = this.getElementBounds(sourceEl);
+        const targetBounds = this.getElementBounds(targetEl);
+        const connectionPoints = this.calculateConnectionPoints(
+          sourceBounds,
+          targetBounds
+        );
+        const group = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "g"
+        );
+        group.setAttribute("class", "connection-group");
+        group.setAttribute("data-connection-id", conn.id);
+        const clickLine = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "line"
+        );
+        clickLine.setAttribute("x1", connectionPoints.fromPoint.x);
+        clickLine.setAttribute("y1", connectionPoints.fromPoint.y);
+        clickLine.setAttribute("x2", connectionPoints.toPoint.x);
+        clickLine.setAttribute("y2", connectionPoints.toPoint.y);
+        clickLine.setAttribute("class", "connection-click-line");
+        clickLine.setAttribute("data-connection-id", conn.id);
+        const line = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "line"
+        );
+        line.setAttribute("x1", connectionPoints.fromPoint.x);
+        line.setAttribute("y1", connectionPoints.fromPoint.y);
+        line.setAttribute("x2", connectionPoints.toPoint.x);
+        line.setAttribute("y2", connectionPoints.toPoint.y);
+        line.setAttribute("class", "connection-line");
+        line.setAttribute("data-connection-id", conn.id);
+        this.applyUMLStyle(line, conn.type, conn);
+        clickLine.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.showConnectionMenu(conn, e.clientX, e.clientY);
+        });
+        group.appendChild(clickLine);
+        group.appendChild(line);
+        if (conn.label && conn.label.trim()) {
+          this.addConnectionLabel(group, connectionPoints, conn.label);
+        }
+        if (conn.sourceMultiplicity && conn.sourceMultiplicity.trim()) {
+          this.addCardinalityLabel(
+            group,
+            connectionPoints,
+            conn.sourceMultiplicity,
+            "source"
+          );
+        }
+        if (conn.targetMultiplicity && conn.targetMultiplicity.trim()) {
+          this.addCardinalityLabel(
+            group,
+            connectionPoints,
+            conn.targetMultiplicity,
+            "target"
+          );
+        }
+        svg.appendChild(group);
+      }
+    });
+  }
+
+  static applyUMLStyle(line, type, connection) {
+    line.setAttribute("stroke", "#000000");
+    line.setAttribute("fill", "none");
+    line.removeAttribute("stroke-dasharray");
+    line.removeAttribute("marker-start");
+    line.removeAttribute("marker-end");
+    const allUMLTypes = [
+      "composition",
+      "aggregation",
+      "association",
+      "inheritance",
+      "dependency",
+      "implementation",
+      "realization",
+    ];
+    let orientation;
+    if (allUMLTypes.includes(type)) {
+      orientation = this.determineMarkerOrientation(connection, type);
+      if (connection) {
+        connection.markerOrientation = orientation;
+      }
+    } else {
+      orientation =
+        connection?.markerOrientation ||
+        this.determineMarkerOrientation(connection, type);
+      if (connection && !connection.markerOrientation) {
+        connection.markerOrientation = orientation;
+      }
+    }
+    switch (type) {
+      case "composition":
+        line.setAttribute("stroke-width", "2");
+        if (orientation === "start") {
+          line.setAttribute("marker-start", "url(#composition)");
+        } else {
+          line.setAttribute("marker-end", "url(#composition-rev)");
+        }
+        break;
+      case "aggregation":
+        line.setAttribute("stroke-width", "2");
+        if (orientation === "start") {
+          line.setAttribute("marker-start", "url(#aggregation)");
+        } else {
+          line.setAttribute("marker-end", "url(#aggregation-rev)");
+        }
+        break;
+      case "inheritance":
+        line.setAttribute("stroke-width", "2");
+        if (orientation === "start") {
+          line.setAttribute("marker-start", "url(#inheritance)");
+        } else {
+          line.setAttribute("marker-end", "url(#inheritance-rev)");
+        }
+        break;
+      case "association":
+        line.setAttribute("stroke-width", "2");
+        const arrowOrientation = this.getDirectionalityOrientation(connection);
+        if (arrowOrientation === "end") {
+          line.setAttribute("marker-end", "url(#arrowhead)");
+        } else if (arrowOrientation === "start") {
+          line.setAttribute("marker-start", "url(#arrowhead-rev)");
+        } else if (
+          connection.sourceMultiplicity ||
+          connection.targetMultiplicity
+        ) {
+        }
+        break;
+      case "dependency":
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "8,4");
+        if (orientation === "start") {
+          line.setAttribute("marker-start", "url(#arrowhead-rev)");
+        } else {
+          line.setAttribute("marker-end", "url(#arrowhead)");
+        }
+        break;
+      case "realization":
+      case "implementation":
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "8,4");
+        if (orientation === "start") {
+          line.setAttribute("marker-start", "url(#implementation)");
+        } else {
+          line.setAttribute("marker-end", "url(#inheritance-rev)");
+        }
+        break;
+      default:
+        line.setAttribute("stroke-width", "2");
+    }
+    line.setAttribute("class", `uml-connection uml-${type}`);
+    line.style.cursor = "pointer";
+    line.style.pointerEvents = "auto";
+  }
+
+  static determineMarkerOrientation(connection, type) {
+    const sourceCard = connection.sourceMultiplicity?.trim() || "";
+    const targetCard = connection.targetMultiplicity?.trim() || "";
+    const isSourceOne = this.isCardinalityOne(sourceCard);
+    const isTargetOne = this.isCardinalityOne(targetCard);
+    const isSourceMany = this.isCardinalityMany(sourceCard);
+    const isTargetMany = this.isCardinalityMany(targetCard);
+    switch (type) {
+      case "composition":
+      case "aggregation":
+        if (isSourceOne && isTargetMany) {
+          return "start";
+        } else if (isTargetOne && isSourceMany) {
+          return "end";
+        } else if (isSourceOne && !isTargetOne) {
+          return "start";
+        } else if (isTargetOne && !isSourceOne) {
+          return "end";
+        } else if (isSourceMany && !isTargetMany) {
+          return "end";
+        } else if (isTargetMany && !isSourceMany) {
+          return "start";
+        } else if (!sourceCard && targetCard) {
+          return "start";
+        } else if (sourceCard && !targetCard) {
+          return "end";
+        }
+        return "start";
+      case "inheritance":
+        if ((sourceCard || targetCard) && isSourceOne && isTargetMany) {
+          return "end";
+        } else if ((sourceCard || targetCard) && isTargetOne && isSourceMany) {
+          return "start";
+        }
+        return "start";
+      case "association":
+        if (isSourceOne && isTargetMany) {
+          return "start";
+        } else if (isTargetOne && isSourceMany) {
+          return "end";
+        }
+        return "none";
+      case "dependency":
+        if ((sourceCard || targetCard) && isSourceOne && isTargetMany) {
+          return "start";
+        } else if ((sourceCard || targetCard) && isTargetOne && isSourceMany) {
+          return "end";
+        }
+        return "end";
+      case "realization":
+      case "implementation":
+        if ((sourceCard || targetCard) && isSourceOne && isTargetMany) {
+          return "end";
+        } else if ((sourceCard || targetCard) && isTargetOne && isSourceMany) {
+          return "start";
+        }
+        return "start";
+      default:
+        return "end";
+    }
+  }
+
+  static isCardinalityOne(cardinality) {
+    if (!cardinality || cardinality.trim() === "") return true;
+    const normalized = cardinality.trim().toLowerCase();
+    return normalized === "1" || normalized === "1..1" || normalized === "0..1";
+  }
+
+  static isCardinalityMany(cardinality) {
+    if (!cardinality || cardinality.trim() === "") return false;
+    const normalized = cardinality.trim().toLowerCase();
+    return (
+      normalized.includes("*") ||
+      normalized.includes("n") ||
+      normalized === "0..*" ||
+      normalized === "1..*" ||
+      (normalized.includes("..") &&
+        !normalized.includes("1..1") &&
+        !normalized.includes("0..1")) ||
+      (normalized.match(/^\d+$/) && parseInt(normalized) > 1)
+    );
+  }
+
+  static isCardinalityOptional(cardinality) {
+    if (!cardinality || cardinality.trim() === "") return false;
+    const normalized = cardinality.trim().toLowerCase();
+    return normalized === "0..1" || normalized === "0..*";
+  }
+
+  static hasDirectionalityFromCardinality(connection) {
+    const sourceCard = connection.sourceMultiplicity?.trim() || "";
+    const targetCard = connection.targetMultiplicity?.trim() || "";
+    if (!sourceCard || !targetCard) return false;
+    const isSourceOne = this.isCardinalityOne(sourceCard);
+    const isTargetOne = this.isCardinalityOne(targetCard);
+    const isSourceMany = this.isCardinalityMany(sourceCard);
+    const isTargetMany = this.isCardinalityMany(targetCard);
+    return (
+      (isSourceOne && isTargetMany) ||
+      (isTargetOne && isSourceMany) ||
+      this.hasUpperBound(sourceCard) !== this.hasUpperBound(targetCard)
+    );
+  }
+
+  static getDirectionalityOrientation(connection) {
+    const sourceCard = connection.sourceMultiplicity?.trim() || "";
+    const targetCard = connection.targetMultiplicity?.trim() || "";
+    const isSourceOne = this.isCardinalityOne(sourceCard);
+    const isTargetOne = this.isCardinalityOne(targetCard);
+    const isSourceMany = this.isCardinalityMany(sourceCard);
+    const isTargetMany = this.isCardinalityMany(targetCard);
+    if (isSourceOne && isTargetMany) {
+      return "start";
+    } else if (isTargetOne && isSourceMany) {
+      return "end";
+    }
+    const sourceHasUpper = this.hasUpperBound(sourceCard);
+    const targetHasUpper = this.hasUpperBound(targetCard);
+
+    if (sourceHasUpper && !targetHasUpper) {
+      return "start";
+    } else if (!sourceHasUpper && targetHasUpper) {
+      return "end";
+    }
+    if (sourceCard && !targetCard) {
+      return "start";
+    } else if (!sourceCard && targetCard) {
+      return "end";
+    }
+    return null;
+  }
+
+  static hasUpperBound(cardinality) {
+    if (!cardinality || cardinality.trim() === "") return false;
+    const normalized = cardinality.trim().toLowerCase();
+    if (
+      normalized === "*" ||
+      normalized === "0..*" ||
+      normalized === "1..*" ||
+      normalized === "n"
+    ) {
+      return false;
+    }
+    const rangeMatch = normalized.match(/(\d+)\.\.(\d+)/);
+    return rangeMatch !== null;
+  }
+
+  static validateCardinality(cardinality) {
+    if (!cardinality || cardinality.trim() === "")
+      return { valid: true, normalized: "" };
+    const normalized = cardinality.trim();
+    const validPatterns = [
+      /^1$/,
+      /^0\.\.1$/,
+      /^1\.\.1$/,
+      /^\*$/,
+      /^0\.\.\*$/,
+      /^1\.\.\*$/,
+      /^\d+$/,
+      /^\d+\.\.\d+$/,
+      /^n$/i,
+    ];
+    const isValid = validPatterns.some((pattern) => pattern.test(normalized));
+    return {
+      valid: isValid,
+      normalized: isValid ? normalized : cardinality,
+      type: this.getCardinalityType(normalized),
+    };
+  }
+
+  static getCardinalityType(cardinality) {
+    if (!cardinality || cardinality.trim() === "") return "none";
+    if (this.isCardinalityOne(cardinality)) return "one";
+    if (this.isCardinalityMany(cardinality)) return "many";
+    if (this.isCardinalityOptional(cardinality)) return "optional";
+    return "custom";
+  }
+
+  static getCardinalityDescription(cardinality) {
+    const validation = this.validateCardinality(cardinality);
+    if (!validation.valid) return `⚠️ Cardinalidad inválida: ${cardinality}`;
+    switch (validation.type) {
+      case "none":
+        return "Sin especificar (tratado como 1)";
+      case "one":
+        return "Exactamente uno";
+      case "many":
+        return "Cero o muchos";
+      case "optional":
+        return "Opcional (0 o 1)";
+      case "custom":
+        return `Personalizada: ${validation.normalized}`;
+      default:
+        return validation.normalized;
+    }
+  }
+
+  static getElementBounds(element) {
+    const canvas = document.getElementById("canvas");
+    const canvasRect = canvas.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    const scale = CanvasManager.scale || 1;
+    return {
+      left: (elementRect.left - canvasRect.left) / scale,
+      top: (elementRect.top - canvasRect.top) / scale,
+      width: elementRect.width / scale,
+      height: elementRect.height / scale,
+      centerX:
+        (elementRect.left - canvasRect.left) / scale +
+        elementRect.width / scale / 2,
+      centerY:
+        (elementRect.top - canvasRect.top) / scale +
+        elementRect.height / scale / 2,
+    };
+  }
+
+  static calculateConnectionPoints(sourceBounds, targetBounds) {
+    const fromPoint = this.getConnectionPointFromBounds(
+      sourceBounds,
+      targetBounds
+    );
+    const toPoint = this.getConnectionPointFromBounds(
+      targetBounds,
+      sourceBounds
+    );
+    return { fromPoint, toPoint };
+  }
+
+  static getConnectionPointFromBounds(elementBounds, otherBounds) {
+    const dx = otherBounds.centerX - elementBounds.centerX;
+    const dy = otherBounds.centerY - elementBounds.centerY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) {
+        return {
+          x: elementBounds.left + elementBounds.width,
+          y: elementBounds.centerY,
+        };
+      } else {
+        return {
+          x: elementBounds.left,
+          y: elementBounds.centerY,
+        };
+      }
+    } else {
+      if (dy > 0) {
+        return {
+          x: elementBounds.centerX,
+          y: elementBounds.top + elementBounds.height,
+        };
+      } else {
+        return {
+          x: elementBounds.centerX,
+          y: elementBounds.top,
+        };
+      }
+    }
+  }
+
+  static addConnectionLabel(group, connectionPoints, label) {
+    const midX =
+      (connectionPoints.fromPoint.x + connectionPoints.toPoint.x) / 2;
+    const midY =
+      (connectionPoints.fromPoint.y + connectionPoints.toPoint.y) / 2;
+    const labelBg = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+    const textLength = label.length * 7;
+    labelBg.setAttribute("x", midX - textLength / 2 - 4);
+    labelBg.setAttribute("y", midY - 12);
+    labelBg.setAttribute("width", textLength + 8);
+    labelBg.setAttribute("height", 16);
+    labelBg.setAttribute("fill", "white");
+    labelBg.setAttribute("stroke", "#cccccc");
+    labelBg.setAttribute("stroke-width", "1");
+    labelBg.setAttribute("rx", "3");
+    group.appendChild(labelBg);
+    const labelText = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+    labelText.setAttribute("x", midX);
+    labelText.setAttribute("y", midY + 3);
+    labelText.setAttribute("text-anchor", "middle");
+    labelText.setAttribute("font-size", "11");
+    labelText.setAttribute("font-family", "Arial, sans-serif");
+    labelText.setAttribute("fill", "#000000");
+    labelText.setAttribute("font-weight", "400");
+    labelText.textContent = label;
+    group.appendChild(labelText);
+  }
+
+  static addCardinalityLabel(group, connectionPoints, cardinality, position) {
+    let x, y;
+    if (position === "source") {
+      x =
+        connectionPoints.fromPoint.x +
+        (connectionPoints.toPoint.x - connectionPoints.fromPoint.x) * 0.15;
+      y =
+        connectionPoints.fromPoint.y +
+        (connectionPoints.toPoint.y - connectionPoints.fromPoint.y) * 0.15;
+      const dx = connectionPoints.toPoint.x - connectionPoints.fromPoint.x;
+      const dy = connectionPoints.toPoint.y - connectionPoints.fromPoint.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0) {
+        const offsetX = (-dy / dist) * 12;
+        const offsetY = (dx / dist) * 12;
+        x += offsetX;
+        y += offsetY;
+      }
+    } else {
+      x =
+        connectionPoints.toPoint.x +
+        (connectionPoints.fromPoint.x - connectionPoints.toPoint.x) * 0.15;
+      y =
+        connectionPoints.toPoint.y +
+        (connectionPoints.fromPoint.y - connectionPoints.toPoint.y) * 0.15;
+      const dx = connectionPoints.fromPoint.x - connectionPoints.toPoint.x;
+      const dy = connectionPoints.fromPoint.y - connectionPoints.toPoint.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0) {
+        const offsetX = (-dy / dist) * 12;
+        const offsetY = (dx / dist) * 12;
+        x += offsetX;
+        y += offsetY;
+      }
+    }
+    const cardinalityBg = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+    const textLength = cardinality.length * 6;
+    cardinalityBg.setAttribute("x", x - textLength / 2 - 2);
+    cardinalityBg.setAttribute("y", y - 10);
+    cardinalityBg.setAttribute("width", textLength + 4);
+    cardinalityBg.setAttribute("height", 14);
+    cardinalityBg.setAttribute("fill", "#f0f0f0");
+    cardinalityBg.setAttribute("stroke", "#999999");
+    cardinalityBg.setAttribute("stroke-width", "0.5");
+    cardinalityBg.setAttribute("rx", "2");
+    group.appendChild(cardinalityBg);
+    const cardinalityText = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+    cardinalityText.setAttribute("x", x);
+    cardinalityText.setAttribute("y", y + 2);
+    cardinalityText.setAttribute("text-anchor", "middle");
+    cardinalityText.setAttribute("font-size", "10");
+    cardinalityText.setAttribute("font-family", "Arial, sans-serif");
+    cardinalityText.setAttribute("fill", "#000000");
+    cardinalityText.setAttribute("font-weight", "bold");
+    cardinalityText.textContent = cardinality;
+    group.appendChild(cardinalityText);
+  }
+
+  static showConnectionMenu(connection, x, y) {
+    const existingMenu = document.getElementById("connection-context-menu");
+    if (existingMenu) existingMenu.remove();
+    const menu = document.createElement("div");
+    menu.id = "connection-context-menu";
+    menu.style.cssText = `
+            position: fixed;
+            top: ${y}px;
+            left: ${x}px;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 200px;
+            padding: 8px;
+            font-family: 'Inter', sans-serif;
+        `;
+    const sourceElement = DiagramManager.elements.get(connection.source);
+    const targetElement = DiagramManager.elements.get(connection.target);
+    const sourceName = sourceElement ? sourceElement.name : "Elemento";
+    const targetName = targetElement ? targetElement.name : "Elemento";
+    menu.innerHTML = `
+            <div style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 13px; color: #374151;">
+                <i class="fas fa-link" style="margin-right: 8px; color: #6b7280;"></i>
+                ${this.getRelationDisplayName(connection.type)}
+            </div>
+            <div style="padding: 4px; font-size: 12px; color: #6b7280;">
+                ${sourceName} → ${targetName}
+            </div>
+            <div style="padding: 8px 0; border-top: 1px solid #f3f4f6; margin-top: 8px;">
+                <button class="btn btn-sm btn-outline-primary" style="width: 100%; margin: 2px 0;" 
+                        onclick="ConnectionManager.editConnection('${
+                          connection.id
+                        }')">
+                    <i class="fas fa-edit" style="margin-right: 6px;"></i> Editar Relación
+                </button>
+                <button class="btn btn-sm btn-outline-info" style="width: 100%; margin: 2px 0;" 
+                        onclick="ConnectionManager.changeConnectionType('${
+                          connection.id
+                        }')">
+                    <i class="fas fa-exchange-alt" style="margin-right: 6px;"></i> Cambiar Tipo
+                </button>
+                <button class="btn btn-sm btn-outline-danger" style="width: 100%; margin: 2px 0;" 
+                        onclick="ConnectionManager.deleteConnection('${
+                          connection.id
+                        }')">
+                    <i class="fas fa-trash" style="margin-right: 6px;"></i> Eliminar
+                </button>
+            </div>
+        `;
+    document.body.appendChild(menu);
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener("click", closeMenu);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeMenu), 100);
+  }
+
+  static getRelationDisplayName(type) {
+    const names = {
+      inheritance: "Herencia",
+      implementation: "Implementación",
+      realization: "Realización",
+      association: "Asociación",
+      aggregation: "Agregación",
+      composition: "Composición",
+      dependency: "Dependencia",
+    };
+    return names[type] || type;
+  }
+
+  static editConnection(connectionId) {
+    const connection = this.connections.find((c) => c.id === connectionId);
+    if (!connection) return;
+    const menu = document.getElementById("connection-context-menu");
+    if (menu) menu.remove();
+    const sourceElement = DiagramManager.elements.get(connection.source);
+    const targetElement = DiagramManager.elements.get(connection.target);
+    const html = `
+        <div class="modal fade" id="connectionDetailsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-edit me-2"></i>Editar Relación
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <strong>Conexión:</strong> ${
+                              sourceElement?.name || "Elemento"
+                            } → ${targetElement?.name || "Elemento"}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Tipo de relación</label>
+                            <select class="form-select" id="detailsRelationType">
+                                <option value="association" ${
+                                  connection.type === "association"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Asociación - Línea sólida simple
+                                </option>
+                                <option value="aggregation" ${
+                                  connection.type === "aggregation"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Agregación - Diamante hueco + línea sólida
+                                </option>
+                                <option value="composition" ${
+                                  connection.type === "composition"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Composición - Diamante relleno + línea sólida
+                                </option>
+                                <option value="inheritance" ${
+                                  connection.type === "inheritance"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Herencia - Triángulo hueco + línea sólida
+                                </option>
+                                <option value="dependency" ${
+                                  connection.type === "dependency"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Dependencia - Flecha + línea punteada
+                                </option>
+                                <option value="implementation" ${
+                                  connection.type === "implementation"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Implementación - Triángulo hueco + línea punteada
+                                </option>
+                            </select>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Multiplicidad origen</label>
+                                <input type="text" class="form-control" id="detailsSourceMultiplicity" 
+                                       value="${
+                                         connection.sourceMultiplicity || ""
+                                       }" placeholder="1, *, 0..1, etc."
+                                       title="Cardinalidades válidas: 1, 0..1, 1..1, *, 0..*, 1..*, n, 2..5, etc.">
+                                <small class="form-text text-muted">Ejemplo: 1 (uno), * (muchos), 0..1 (opcional)</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Multiplicidad destino</label>
+                                <input type="text" class="form-control" id="detailsTargetMultiplicity" 
+                                       value="${
+                                         connection.targetMultiplicity || ""
+                                       }" placeholder="1, *, 0..1, etc."
+                                       title="Cardinalidades válidas: 1, 0..1, 1..1, *, 0..*, 1..*, n, 2..5, etc.">
+                                <small class="form-text text-muted">Si usas "1" y "*", se añadirá flecha automáticamente</small>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <small>Siguiendo los estándares UML de Enterprise Architect y StarUML, al establecer cardinalidades de "1" a "*" (o "*" a "1"), 
+                            la flecha de navegabilidad se mostrará automáticamente en la dirección correcta (desde "muchos" hacia "uno").</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Etiqueta de la relación (opcional)</label>
+                            <input type="text" class="form-control" id="detailsRelationLabel" 
+                                   value="${
+                                     connection.label || ""
+                                   }" placeholder="nombre de la relación">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="ConnectionManager.updateConnectionFromEdit('${connectionId}')">
+                            <i class="fas fa-save me-1"></i>Actualizar Relación
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    const oldModal = document.getElementById("connectionDetailsModal");
+    if (oldModal) oldModal.remove();
+    document.body.insertAdjacentHTML("beforeend", html);
+    this.editingConnectionId = connectionId;
+    const modal = new bootstrap.Modal(
+      document.getElementById("connectionDetailsModal")
+    );
+    modal.show();
+    document
+      .getElementById("connectionDetailsModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static updateConnectionFromEdit(connectionId) {
+    const connection = this.connections.find(
+      (conn) => conn.id === connectionId
+    );
+    if (!connection) return;
+    const oldType = connection.type;
+    const oldSourceMultiplicity = connection.sourceMultiplicity;
+    const oldTargetMultiplicity = connection.targetMultiplicity;
+    connection.type = document.getElementById("detailsRelationType").value;
+    connection.sourceMultiplicity = document.getElementById(
+      "detailsSourceMultiplicity"
+    ).value;
+    connection.targetMultiplicity = document.getElementById(
+      "detailsTargetMultiplicity"
+    ).value;
+    connection.label = document.getElementById("detailsRelationLabel").value;
+    const allUMLTypes = [
+      "composition",
+      "aggregation",
+      "association",
+      "inheritance",
+      "dependency",
+      "implementation",
+      "realization",
+    ];
+    const needsRecalculation = allUMLTypes.includes(connection.type);
+    if (
+      needsRecalculation ||
+      oldType !== connection.type ||
+      oldSourceMultiplicity !== connection.sourceMultiplicity ||
+      oldTargetMultiplicity !== connection.targetMultiplicity
+    ) {
+      connection.markerOrientation = this.determineMarkerOrientation(
+        connection,
+        connection.type
+      );
+    }
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionDetailsModal")
+    ).hide();
+    PersistenceManager.markAsChanged();
+    this.editingConnectionId = null;
+  }
+
+  static deleteConnection(connectionId) {
+    const menu = document.getElementById("connection-context-menu");
+    if (menu) menu.remove();
+    if (confirm("¿Estás seguro de que quieres eliminar esta relación?")) {
+      const index = this.connections.findIndex((c) => c.id === connectionId);
+      if (index > -1) {
+        this.connections.splice(index, 1);
+        this.updateConnections();
+        PersistenceManager.markAsChanged();
+      }
+    }
+  }
+
+  static setConnectionStyle(line, type) {
+    line.style.stroke = "#000000";
+    line.style.strokeWidth = "2";
+    line.style.fill = "none";
+    line.style.strokeDasharray = "none";
+    line.removeAttribute("marker-start");
+    line.removeAttribute("marker-end");
+    switch (type) {
+      case "inheritance":
+        line.setAttribute("marker-end", "url(#inheritance)");
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2.5";
+        break;
+      case "implementation":
+      case "realization":
+        line.setAttribute("marker-end", "url(#inheritance)");
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2.5";
+        line.style.strokeDasharray = "8,4";
+        break;
+      case "association":
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2.5";
+        break;
+      case "aggregation":
+        line.setAttribute("marker-start", "url(#diamond)");
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2.5";
+        break;
+      case "composition":
+        line.setAttribute("marker-start", "url(#filledDiamond)");
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2.5";
+        break;
+      case "dependency":
+        line.setAttribute("marker-end", "url(#arrowhead)");
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2";
+        line.style.strokeDasharray = "8,4";
+        break;
+      default:
+        line.style.stroke = "#000000";
+        line.style.strokeWidth = "2";
+    }
+  }
+
+  static addConnectionLabels(group, path, conn) {
+    const midX = (path.source.x + path.target.x) / 2;
+    const midY = (path.source.y + path.target.y) / 2;
+    if (conn.label) {
+      this.createLabel(
+        group,
+        midX,
+        midY - 15,
+        conn.label,
+        "12px",
+        "#2d3748",
+        "bold"
+      );
+    }
+    if (conn.sourceMultiplicity) {
+      const labelX = path.source.x + (midX - path.source.x) * 0.2;
+      const labelY = path.source.y + (midY - path.source.y) * 0.2;
+      this.createLabel(
+        group,
+        labelX,
+        labelY - 8,
+        conn.sourceMultiplicity,
+        "10px",
+        "#6b7280"
+      );
+    }
+    if (conn.targetMultiplicity) {
+      const labelX = path.target.x + (midX - path.target.x) * 0.2;
+      const labelY = path.target.y + (midY - path.target.y) * 0.2;
+      this.createLabel(
+        group,
+        labelX,
+        labelY - 8,
+        conn.targetMultiplicity,
+        "10px",
+        "#6b7280"
+      );
+    }
+  }
+
+  static createLabel(
+    group,
+    x,
+    y,
+    text,
+    fontSize,
+    color,
+    fontWeight = "normal"
+  ) {
+    const background = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+    const textWidth = text.length * (parseInt(fontSize) * 0.6);
+    const textHeight = parseInt(fontSize) + 4;
+    background.setAttribute("x", x - textWidth / 2 - 3);
+    background.setAttribute("y", y - textHeight / 2 - 2);
+    background.setAttribute("width", textWidth + 6);
+    background.setAttribute("height", textHeight + 4);
+    background.setAttribute("fill", "white");
+    background.setAttribute("stroke", "#e5e7eb");
+    background.setAttribute("stroke-width", "1");
+    background.setAttribute("rx", "3");
+    const textElement = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+    textElement.setAttribute("x", x);
+    textElement.setAttribute("y", y + 3);
+    textElement.setAttribute("text-anchor", "middle");
+    textElement.setAttribute("dominant-baseline", "middle");
+    textElement.setAttribute("font-size", fontSize);
+    textElement.setAttribute("fill", color);
+    textElement.setAttribute("font-weight", fontWeight);
+    textElement.setAttribute("font-family", "Inter, sans-serif");
+    textElement.textContent = text;
+    group.appendChild(background);
+    group.appendChild(textElement);
+  }
+
+  static showConnectionOptions(connectionId) {
+    const connection = this.connections.find(
+      (conn) => conn.id === connectionId
+    );
+    if (!connection) return;
+    const html = `
+                    <div class="modal fade" id="connectionOptionsModal" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Opciones de Relación</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Tipo</label>
+                                        <select class="form-select" id="editRelationType">
+                                            <option value="inheritance" ${
+                                              connection.type === "inheritance"
+                                                ? "selected"
+                                                : ""
+                                            }>Herencia</option>
+                                            <option value="implementation" ${
+                                              connection.type ===
+                                              "implementation"
+                                                ? "selected"
+                                                : ""
+                                            }>Implementación</option>
+                                            <option value="association" ${
+                                              connection.type === "association"
+                                                ? "selected"
+                                                : ""
+                                            }>Asociación</option>
+                                            <option value="aggregation" ${
+                                              connection.type === "aggregation"
+                                                ? "selected"
+                                                : ""
+                                            }>Agregación</option>
+                                            <option value="composition" ${
+                                              connection.type === "composition"
+                                                ? "selected"
+                                                : ""
+                                            }>Composición</option>
+                                            <option value="dependency" ${
+                                              connection.type === "dependency"
+                                                ? "selected"
+                                                : ""
+                                            }>Dependencia</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Multiplicidad origen</label>
+                                        <input type="text" class="form-control" id="editSourceMultiplicity" value="${
+                                          connection.sourceMultiplicity || ""
+                                        }"
+                                               title="Cardinalidades válidas: 1, 0..1, 1..1, *, 0..*, 1..*, n, 2..5, etc.">
+                                        <small class="form-text text-muted">El símbolo UML se reorientará automáticamente</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Multiplicidad destino</label>
+                                        <input type="text" class="form-control" id="editTargetMultiplicity" value="${
+                                          connection.targetMultiplicity || ""
+                                        }"
+                                               title="Cardinalidades válidas: 1, 0..1, 1..1, *, 0..*, 1..*, n, 2..5, etc.">
+                                        <small class="form-text text-muted">Cambios se reflejan inmediatamente al guardar</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Etiqueta</label>
+                                        <input type="text" class="form-control" id="editRelationLabel" value="${
+                                          connection.label || ""
+                                        }">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-danger me-auto" onclick="ConnectionManager.deleteConnection('${connectionId}')">
+                                        <i class="fas fa-trash me-1"></i> Eliminar
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="button" class="btn btn-primary" onclick="ConnectionManager.updateConnection('${connectionId}')">Actualizar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("connectionOptionsModal")
+    );
+    modal.show();
+    document
+      .getElementById("connectionOptionsModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static updateConnection(connectionId) {
+    const connection = this.connections.find(
+      (conn) => conn.id === connectionId
+    );
+    if (!connection) return;
+    const oldType = connection.type;
+    const oldSourceMultiplicity = connection.sourceMultiplicity;
+    const oldTargetMultiplicity = connection.targetMultiplicity;
+    connection.type = document.getElementById("editRelationType").value;
+    connection.sourceMultiplicity = document.getElementById(
+      "editSourceMultiplicity"
+    ).value;
+    connection.targetMultiplicity = document.getElementById(
+      "editTargetMultiplicity"
+    ).value;
+    connection.label = document.getElementById("editRelationLabel").value;
+
+    // SIEMPRE recalcular la orientación del marcador para TODOS los tipos de relación UML
+    const allUMLTypes = [
+      "composition",
+      "aggregation",
+      "association",
+      "inheritance",
+      "dependency",
+      "implementation",
+      "realization",
+    ];
+    const needsRecalculation = allUMLTypes.includes(connection.type);
+
+    if (
+      needsRecalculation ||
+      oldType !== connection.type ||
+      oldSourceMultiplicity !== connection.sourceMultiplicity ||
+      oldTargetMultiplicity !== connection.targetMultiplicity
+    ) {
+      connection.markerOrientation = this.determineMarkerOrientation(
+        connection,
+        connection.type
+      );
+    }
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionOptionsModal")
+    ).hide();
+    PersistenceManager.markAsChanged();
+  }
+
+  static changeConnectionType(connectionId) {
+    const connection = this.connections.find((c) => c.id === connectionId);
+    if (!connection) return;
+    const menu = document.getElementById("connection-context-menu");
+    if (menu) menu.remove();
+    const html = `
+        <div class="modal fade" id="changeConnectionTypeModal" tabindex="-1">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Cambiar Tipo de Relación</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Nuevo tipo de relación</label>
+                            <select class="form-select" id="newConnectionType">
+                                <option value="association" ${
+                                  connection.type === "association"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Asociación (línea sólida)
+                                </option>
+                                <option value="aggregation" ${
+                                  connection.type === "aggregation"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Agregación (diamante hueco)
+                                </option>
+                                <option value="composition" ${
+                                  connection.type === "composition"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Composición (diamante relleno)
+                                </option>
+                                <option value="inheritance" ${
+                                  connection.type === "inheritance"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Herencia (triángulo hueco)
+                                </option>
+                                <option value="dependency" ${
+                                  connection.type === "dependency"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Dependencia (línea punteada con flecha)
+                                </option>
+                                <option value="implementation" ${
+                                  connection.type === "implementation"
+                                    ? "selected"
+                                    : ""
+                                }>
+                                    Implementación (línea punteada con triángulo)
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="ConnectionManager.updateConnectionType('${connectionId}')">
+                            Cambiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML("beforeend", html);
+    const modal = new bootstrap.Modal(
+      document.getElementById("changeConnectionTypeModal")
+    );
+    modal.show();
+    document
+      .getElementById("changeConnectionTypeModal")
+      .addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
+  }
+
+  static updateConnectionType(connectionId) {
+    const connection = this.connections.find((c) => c.id === connectionId);
+    if (!connection) return;
+    const newType = document.getElementById("newConnectionType").value;
+
+    // Guardar el tipo original para detectar cambios
+    const oldType = connection.type;
+
+    connection.type = newType;
+
+    // SIEMPRE recalcular la orientación del marcador para TODOS los tipos de relación UML
+    const allUMLTypes = [
+      "composition",
+      "aggregation",
+      "association",
+      "inheritance",
+      "dependency",
+      "implementation",
+      "realization",
+    ];
+    const needsRecalculation = allUMLTypes.includes(newType);
+
+    // Recalcular la orientación del marcador si cambia el tipo o es un tipo que depende de cardinalidad
+    if (needsRecalculation || oldType !== newType) {
+      // Recalcular la orientación apropiada según UML
+      connection.markerOrientation = this.determineMarkerOrientation(
+        connection,
+        newType
+      );
+    }
+
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("changeConnectionTypeModal")
+    ).hide();
+    this.showUpdateMessage(
+      `Relación cambiada a: ${this.getRelationDisplayName(newType)}`
+    );
+    PersistenceManager.markAsChanged();
+  }
+
+  static showUpdateMessage(message) {
+    const toast = document.createElement("div");
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #10b981;
+        color: white;
+        padding: 12px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: all 0.3s ease;
+    `;
+    toast.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateY(0)";
+    }, 10);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(-10px)";
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  static deleteConnection(connectionId) {
+    this.connections = this.connections.filter(
+      (conn) => conn.id !== connectionId
+    );
+    this.updateConnections();
+    bootstrap.Modal.getInstance(
+      document.getElementById("connectionOptionsModal")
+    ).hide();
+    PersistenceManager.markAsChanged();
+  }
+
+  static removeElementConnections(elementId) {
+    this.connections = this.connections.filter(
+      (conn) => conn.source !== elementId && conn.target !== elementId
+    );
+    this.updateConnections();
+  }
+}
+
+class CanvasManager {
+  static scale = 1;
+  static isPanning = false;
+  static lastPanX = 0;
+  static lastPanY = 0;
+
+  static init() {
+    const canvasWrapper = document.querySelector(".canvas-wrapper");
+    const canvas = document.getElementById("canvas");
+    canvasWrapper.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      this.zoom(delta);
+    });
+
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.target === canvas) {
+        // 🎯 DESELECCIONAR ELEMENTOS AL HACER CLIC EN ÁREA VACÍA
+        if (
+          typeof DiagramManager !== "undefined" &&
+          DiagramManager.selectedElement
+        ) {
+          DiagramManager.deselectAll();
+          console.log("🧹 Elemento deseleccionado - clic en área vacía");
+        }
+        this.startPan(e);
+      }
+    });
+
+    canvas.addEventListener("click", (e) => {
+      console.log("🖱️ Click en canvas detectado:", e.target);
+
+      // Solo deseleccionar si es click DIRECTO en el canvas (área vacía)
+      const isDirectCanvasClick =
+        e.target === canvas || e.target.tagName === "svg";
+      const clickedUMLElement = e.target.closest(
+        ".uml-class, .uml-interface, .uml-abstract, .uml-enum, .uml-package, .uml-note, .selected-element"
+      );
+      const isSelecting = document.querySelector('[data-selecting="true"]');
+      const hasSelectedElements = document.querySelector(".selected-element");
+
+      console.log("🔍 Análisis del click:", {
+        isDirectCanvasClick,
+        clickedUMLElement: !!clickedUMLElement,
+        isSelecting: !!isSelecting,
+        hasSelectedElements: !!hasSelectedElements,
+        targetTag: e.target.tagName,
+        targetClasses: e.target.className,
+      });
+
+      // SOLO deseleccionar si:
+      // 1. Es click directo en canvas/svg (área vacía)
+      // 2. NO hay herramienta seleccionada
+      // 3. NO se clickeó en elemento UML
+      // 4. NO hay selección en progreso
+      if (
+        isDirectCanvasClick &&
+        !ToolManager.selectedTool &&
+        !clickedUMLElement &&
+        !isSelecting
+      ) {
+        console.log("✅ Deseleccionando elementos - click en área vacía");
+        DiagramManager.deselectAll();
+      } else {
+        console.log(
+          "🚫 NO deseleccionar - click en elemento o selección activa"
+        );
+      }
+    });
+  }
+
+  static startPan(e) {
+    this.isPanning = true;
+    this.lastPanX = e.clientX;
+    this.lastPanY = e.clientY;
+    const canvas = document.getElementById("canvas");
+    canvas.classList.add("dragging");
+    document.addEventListener("mousemove", this.pan.bind(this));
+    document.addEventListener("mouseup", this.stopPan.bind(this));
+  }
+
+  static pan(e) {
+    if (!this.isPanning) return;
+    const deltaX = e.clientX - this.lastPanX;
+    const deltaY = e.clientY - this.lastPanY;
+    const canvasWrapper = document.querySelector(".canvas-wrapper");
+    canvasWrapper.scrollLeft -= deltaX;
+    canvasWrapper.scrollTop -= deltaY;
+    this.lastPanX = e.clientX;
+    this.lastPanY = e.clientY;
+  }
+
+  static stopPan() {
+    this.isPanning = false;
+    const canvas = document.getElementById("canvas");
+    canvas.classList.remove("dragging");
+    document.removeEventListener("mousemove", this.pan.bind(this));
+    document.removeEventListener("mouseup", this.stopPan.bind(this));
+  }
+
+  static zoom(factor) {
+    const newScale = Math.max(0.5, Math.min(2, this.scale * factor));
+    if (newScale !== this.scale) {
+      this.scale = newScale;
+      this.updateTransform();
+      this.updateZoomLabel();
+    }
+  }
+
+  static zoomIn() {
+    this.zoom(1.2);
+  }
+
+  static zoomOut() {
+    this.zoom(0.8);
+  }
+
+  static updateTransform() {
+    const canvas = document.getElementById("canvas");
+    canvas.style.transform = `scale(${this.scale})`;
+    canvas.style.transformOrigin = "top left";
+    ConnectionManager.updateConnections();
+  }
+
+  static updateZoomLabel() {
+    const zoomLabel = document.getElementById("zoom-level");
+    if (zoomLabel) {
+      zoomLabel.textContent = Math.round(this.scale * 100) + "%";
+    }
+  }
+}
+
+class PersistenceManager {
+  static STORAGE_KEY = "uml_diagram_data";
+
+  static getStorageKey() {
+    if (DiagramManager && DiagramManager.getStorageKey) {
+      return DiagramManager.getStorageKey();
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const salaId = urlParams.get("id");
+    return `uml_diagram_data_${salaId || "default"}`;
+  }
+
+  static AUTO_SAVE_INTERVAL = 10000;
+  static autoSaveTimer = null;
+  static hasChanges = false;
+
+  static init() {
+    this.loadDiagram();
+    this.startAutoSave();
+
+    window.addEventListener("beforeunload", () => {
+      this.saveDiagram();
+    });
+
+    window.addEventListener("blur", () => {
+      if (this.hasChanges) {
+        this.saveDiagram();
+      }
+    });
+  }
+
+  static safeMarkAsChanged() {
+    if (typeof PersistenceManager !== "undefined") {
+      PersistenceManager.markAsChanged();
+    }
+  }
+
+  static markAsChanged() {
+    this.hasChanges = true;
+
+    // 🚫 BLOQUEO GLOBAL DE SOCKET.IO
+    if (window.BLOCK_ALL_SOCKET_IO) {
+      console.log(
+        "🚫 SOCKET.IO BLOQUEADO GLOBALMENTE - markAsChanged() ignorado"
+      );
+      return;
+    }
+
+    // 🎯 BLOQUEAR SI ES SOLO SELECCIÓN (NO EDICIÓN REAL)
+    if (window.IS_ONLY_SELECTION && !window.IS_REAL_EDIT) {
+      console.log("🚫 SOCKET.IO BLOQUEADO - solo selección, no edición real");
+      return;
+    }
+
+    // Check if we're in selection-only mode (no Socket.IO events)
+    if (
+      window.pizarraColaborativa &&
+      window.pizarraColaborativa.isReceivingUpdate
+    ) {
+      console.log("🚫 Selección visual - No enviando eventos Socket.IO");
+      return;
+    }
+
+    if (
+      typeof CollaborationManager !== "undefined" &&
+      CollaborationManager &&
+      CollaborationManager.isConnected &&
+      !CollaborationManager.isReceivingUpdate
+    ) {
+      try {
+        CollaborationManager.sendUpdate("fullState", {
+          state: CollaborationManager.getCurrentState(),
+        });
+        console.log("📤 Cambio real enviado por Socket.IO");
+      } catch (error) {
+        console.warn("Error al enviar actualización de colaboración:", error);
+      }
+    }
+  }
+
+  // REMOVIDO: Auto-guardado por tiempo - ahora se guarda solo por eventos
+  static startAutoSave() {
+    console.log("📝 Sistema de guardado por eventos activado (no por tiempo)");
+    // Ya no usamos intervalos de tiempo
+  }
+
+  static saveDiagram() {
+    try {
+      const diagramData = {
+        version: "1.0",
+        timestamp: new Date().toISOString(),
+        elements: this.serializeElements(),
+        connections: ConnectionManager.connections.map((conn) => ({
+          ...conn,
+        })),
+        canvas: {
+          scale: CanvasManager.scale || 1,
+          width: 1500,
+          height: 1000,
+        },
+      };
+      const diagramJson = JSON.stringify(diagramData);
+      localStorage.setItem(this.getStorageKey(), diagramJson);
+      if (typeof SalaManager !== "undefined" && SalaManager.salaId) {
+        SalaManager.saveDiagram();
+      }
+      this.hasChanges = false;
+      this.showSaveIndicator();
+    } catch (error) {
+      console.error("❌ Error guardando diagrama:", error);
+    }
+  }
+
+  static serializeElements() {
+    const elements = [];
+    DiagramManager.elements.forEach((element) => {
+      const serialized = {
+        id: element.id,
+        type: element.type,
+        x: element.x,
+        y: element.y,
+        name: element.name,
+      };
+      if (element.type === "class") {
+        serialized.attributes = element.attributes || [];
+        serialized.methods = element.methods || [];
+        serialized.stereotype = element.stereotype || "";
+        serialized.visibility = element.visibility || "public";
+      } else if (element.type === "enum") {
+        serialized.values = element.values || [];
+        serialized.stereotype = element.stereotype || "enumeration";
+      } else if (element.type === "package") {
+        serialized.description = element.description || "";
+      } else if (element.type === "note") {
+        serialized.text = element.text || "";
+      }
+      elements.push(serialized);
+    });
+    return elements;
+  }
+
+  static loadDiagram() {
+    try {
+      const savedData = localStorage.getItem(this.getStorageKey());
+      if (!savedData) {
+        console.log("No saved diagram found");
+        return false;
+      }
+      const diagramData = JSON.parse(savedData);
+      DiagramManager.elements.clear();
+      DiagramManager.selectedElement = null;
+      ConnectionManager.connections = [];
+      this.deserializeElements(diagramData.elements || []);
+      ConnectionManager.connections = diagramData.connections || [];
+      if (diagramData.canvas) {
+        CanvasManager.scale = diagramData.canvas.scale || 1;
+        CanvasManager.updateZoomLabel();
+        CanvasManager.updateTransform();
+      }
+      ConnectionManager.updateConnections();
+      PropertiesManager.showEmpty();
+      this.hasChanges = false;
+      this.showLoadIndicator();
+      return true;
+    } catch (error) {
+      console.error("Error loading diagram:", error);
+      return false;
+    }
+  }
+
+  static deserializeElements(elementsData) {
+    elementsData.forEach((data) => {
+      let element;
+      switch (data.type) {
+        case "class":
+          element = new UMLClass(data.id, data.x, data.y, data.name);
+          element.attributes = data.attributes || [];
+          element.methods = data.methods || [];
+          element.stereotype = data.stereotype || "";
+          element.visibility = data.visibility || "public";
+          break;
+        case "interface":
+          element = new UMLClass(data.id, data.x, data.y, data.name);
+          element.stereotype = "interface";
+          element.attributes = data.attributes || [];
+          element.methods = data.methods || [];
+          break;
+        case "abstract":
+          element = new UMLClass(data.id, data.x, data.y, data.name);
+          element.stereotype = "abstract";
+          element.attributes = data.attributes || [];
+          element.methods = data.methods || [];
+          break;
+        case "enum":
+          element = new UMLEnum(data.id, data.x, data.y, data.name);
+          element.values = data.values || [];
+          break;
+        case "package":
+          element = new UMLPackage(data.id, data.x, data.y, data.name);
+          element.description = data.description || "";
+          break;
+        case "note":
+          element = new UMLNote(
+            data.id,
+            data.x,
+            data.y,
+            data.text || "Nueva nota..."
+          );
+          break;
+        default:
+          console.warn("Unknown element type:", data.type);
+          return;
+      }
+      if (element) {
+        DiagramManager.elements.set(element.id, element);
+        DiagramManager.addToCanvas(element);
+        const idNumber = parseInt(element.id.split("_")[1]);
+        if (idNumber >= DiagramManager.idCounter) {
+          DiagramManager.idCounter = idNumber + 1;
+        }
+      }
+    });
+  }
+
+  static showSaveIndicator() {
+    this.showIndicator("💾 Guardado automáticamente", "#10b981");
+  }
+
+  static showLoadIndicator() {
+    this.showIndicator("📂 Diagrama cargado", "#3b82f6");
+  }
+
+  static showIndicator(message, color) {
+    const existing = document.getElementById("save-indicator");
+    if (existing) existing.remove();
+    const indicator = document.createElement("div");
+    indicator.id = "save-indicator";
+    indicator.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${color};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+        `;
+    indicator.textContent = message;
+    document.body.appendChild(indicator);
+
+    setTimeout(() => {
+      indicator.style.opacity = "1";
+      indicator.style.transform = "translateY(0)";
+    }, 10);
+
+    setTimeout(() => {
+      indicator.style.opacity = "0";
+      indicator.style.transform = "translateY(-10px)";
+      setTimeout(() => indicator.remove(), 300);
+    }, 2000);
+  }
+
+  static exportToFile() {
+    const diagramData = {
+      version: "1.0",
+      timestamp: new Date().toISOString(),
+      elements: this.serializeElements(),
+      connections: ConnectionManager.connections,
+      canvas: {
+        scale: CanvasManager.scale || 1,
+        width: 1500,
+        height: 1000,
+      },
+    };
+    const blob = new Blob([JSON.stringify(diagramData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diagrama_uml_${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  static importFromFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const diagramData = JSON.parse(e.target.result);
+            DiagramManager.elements.clear();
+            DiagramManager.selectedElement = null;
+            ConnectionManager.connections = [];
+            this.deserializeElements(diagramData.elements || []);
+            ConnectionManager.connections = diagramData.connections || [];
+            if (diagramData.canvas) {
+              CanvasManager.scale = diagramData.canvas.scale || 1;
+              CanvasManager.updateZoomLabel();
+              CanvasManager.updateTransform();
+            }
+            ConnectionManager.updateConnections();
+            PropertiesManager.showEmpty();
+            this.hasChanges = false;
+            this.showIndicator("📁 Archivo importado exitosamente", "#10b981");
+          } catch (error) {
+            alert("Error al cargar el archivo: " + error.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    input.click();
+  }
+
+  static clearDiagram() {
+    if (
+      confirm(
+        "¿Estás seguro de que quieres limpiar todo el diagrama? Esta acción no se puede deshacer."
+      )
+    ) {
+      localStorage.removeItem(this.getStorageKey());
+      DiagramManager.clearAll();
+      this.hasChanges = false;
+      this.showIndicator("🗑️ Diagrama limpiado", "#ef4444");
+    }
+  }
+}
+
+class ToolManager {
+  static init() {
+    const toolItems = document.querySelectorAll(".toolbar-item[draggable]");
+    toolItems.forEach((item) => {
+      item.addEventListener("dragstart", this.handleDragStart);
+      item.addEventListener("click", this.handleToolClick.bind(this));
+    });
+    const canvas = document.getElementById("canvas");
+    canvas.addEventListener("dragover", this.handleDragOver);
+    canvas.addEventListener("drop", this.handleDrop);
+    canvas.addEventListener("click", this.handleCanvasClick.bind(this));
+  }
+  static selectedTool = null;
+  static handleToolClick(e) {
+    e.preventDefault();
+    const toolType = e.currentTarget.dataset.tool;
+    if (
+      ["class", "interface", "abstract", "enum", "package", "note"].includes(
+        toolType
+      )
+    ) {
+      this.selectedTool = toolType;
+      document.body.style.cursor = "crosshair";
+      document
+        .querySelectorAll(".toolbar-item")
+        .forEach((item) => item.classList.remove("selected"));
+      e.currentTarget.classList.add("selected");
+      this.showToolMessage(toolType);
+    }
+  }
+
+  static handleCanvasClick(e) {
+    if (this.selectedTool && e.target === e.currentTarget) {
+      const canvas = document.getElementById("canvas");
+      const canvasRect = canvas.getBoundingClientRect();
+      const canvasWrapper = document.querySelector(".canvas-wrapper");
+      const x =
+        (e.clientX - canvasRect.left + canvasWrapper.scrollLeft) /
+        CanvasManager.scale;
+      const y =
+        (e.clientY - canvasRect.top + canvasWrapper.scrollTop) /
+        CanvasManager.scale;
+      DiagramManager.createElement(this.selectedTool, x, y);
+      this.resetTool();
+    }
+  }
+
+  static resetTool() {
+    this.selectedTool = null;
+    document.body.style.cursor = "default";
+    document
+      .querySelectorAll(".toolbar-item")
+      .forEach((item) => item.classList.remove("selected"));
+    this.hideToolMessage();
+  }
+
+  static showToolMessage(toolType) {
+    this.hideToolMessage();
+    const message = document.createElement("div");
+    message.id = "tool-message";
+    message.className = "tool-message";
+    message.innerHTML = `
+                    <div class="alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index: 1050;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Haz clic en la pizarra para agregar: <strong>${this.getToolDisplayName(
+                          toolType
+                        )}</strong>
+                        <button class="btn btn-sm btn-outline-dark ms-3" onclick="ToolManager.resetTool()">
+                            Cancelar
+                        </button>
+                    </div>
+                `;
+    document.body.appendChild(message);
+  }
+
+  static hideToolMessage() {
+    const message = document.getElementById("tool-message");
+    if (message) {
+      message.remove();
+    }
+  }
+
+  static getToolDisplayName(toolType) {
+    const names = {
+      class: "Clase",
+      interface: "Interfaz",
+      abstract: "Clase Abstracta",
+      enum: "Enumeración",
+      package: "Paquete",
+      note: "Nota",
+    };
+    return names[toolType] || toolType;
+  }
+
+  static handleDragStart(e) {
+    e.dataTransfer.setData("text/plain", e.target.dataset.tool);
+    e.dataTransfer.effectAllowed = "copy";
+  }
+
+  static handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  static handleDrop(e) {
+    e.preventDefault();
+    const toolType = e.dataTransfer.getData("text/plain");
+    if (
+      !toolType ||
+      !["class", "interface", "abstract", "enum", "package", "note"].includes(
+        toolType
+      )
+    ) {
+      return;
+    }
+    const canvas = document.getElementById("canvas");
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasWrapper = document.querySelector(".canvas-wrapper");
+    const x =
+      (e.clientX - canvasRect.left + canvasWrapper.scrollLeft) /
+      CanvasManager.scale;
+    const y =
+      (e.clientY - canvasRect.top + canvasWrapper.scrollTop) /
+      CanvasManager.scale;
+    DiagramManager.createElement(toolType, x, y);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  try {
+    CanvasManager.init();
+    ToolManager.init();
+    ConnectionManager.init();
+    PersistenceManager.init();
+    setupPersistenceButtons();
+  } catch (error) {
+    console.error("Error al inicializar la aplicación:", error);
+  }
+});
+
+function setupPersistenceButtons() {
+  const toolPanel = document.querySelector(".bg-light.p-3");
+  if (toolPanel && !document.getElementById("persistence-controls")) {
+    const persistenceDiv = document.createElement("div");
+    persistenceDiv.id = "persistence-controls";
+    persistenceDiv.className = "mt-3 pt-3 border-top";
+    persistenceDiv.innerHTML = `
+                    <h6><i class="fas fa-save me-2"></i>Persistencia</h6>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-sm" onclick="PersistenceManager.exportToFile()">
+                            <i class="fas fa-download me-1"></i>Exportar
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="PersistenceManager.importFromFile()">
+                            <i class="fas fa-upload me-1"></i>Importar
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="PersistenceManager.clearDiagram()">
+                            <i class="fas fa-trash me-1"></i>Limpiar
+                        </button>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Auto-guardado cada 3 segundos
+                    </small>
+                `;
+    toolPanel.appendChild(persistenceDiv);
+  }
+}
+
+document.addEventListener("click", function (e) {
+  const button = e.target.closest("button[data-action]");
+  if (button) {
+    e.preventDefault();
+    e.stopPropagation();
+    const action = button.dataset.action;
+    const classId = button.dataset.classId;
+    const enumId = button.dataset.enumId;
+    const index = parseInt(button.dataset.index);
+    switch (action) {
+      case "edit-attribute":
+        AttributeManager.editAttribute(classId, index);
+        break;
+      case "delete-attribute":
+        AttributeManager.deleteAttribute(classId, index);
+        break;
+      case "edit-method":
+        MethodManager.editMethod(classId, index);
+        break;
+      case "delete-method":
+        MethodManager.deleteMethod(classId, index);
+        break;
+      case "edit-enum-value":
+        EnumManager.editValue(enumId, index);
+        break;
+      case "delete-enum-value":
+        EnumManager.deleteValue(enumId, index);
+        break;
+    }
+  }
+});
+
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Delete" && DiagramManager.selectedElement) {
+    DiagramManager.deleteElement(DiagramManager.selectedElement.id);
+  }
+  if (e.ctrlKey && e.key === "a") {
+    e.preventDefault();
+  }
+  if (e.ctrlKey && e.key === "s") {
+    e.preventDefault();
+    PersistenceManager.exportToFile();
+  }
+  if (e.key === "Escape") {
+    DiagramManager.deselectAll();
+    ToolManager.resetTool();
+    ConnectionManager.cancelConnectionCreation();
+  }
+});
+
+class SalaManager {
+  static salaId = null;
+  static isLoading = false;
+  static saveTimeout = null;
+
+  static init() {
+    try {
+      this.salaId = this.getSalaIdFromURL();
+      if (!this.salaId) {
+        console.error("❌ No se encontró ID de sala en la URL");
+        this.showError("No se especificó una sala válida en la URL");
+        return;
+      }
+
+      // Intentar convertir a número para verificar validez
+      const salaIdNum = parseInt(this.salaId, 10);
+      if (isNaN(salaIdNum) || salaIdNum <= 0) {
+        console.warn("⚠️ ID de sala no numérico o inválido:", this.salaId);
+        this.showError("ID de sala inválido: " + this.salaId);
+        return;
+      }
+
+      // Usar el valor numérico para asegurar consistencia
+      this.salaId = salaIdNum.toString();
+      this.currentSalaId = this.salaId;
+
+      console.log(`🚀 Inicializando sistema de sala con ID: ${this.salaId}`);
+
+      // Limpiar cualquier dato previo que pueda interferir
+      this.clearLocalStorage();
+
+      // Configurar clave personalizada para la sala actual
+      DiagramManager.setStorageKey(`sala-${this.salaId}`);
+
+      // Iniciar carga de datos
+      this.loadSalaData(this.salaId)
+        .then((sala) => {
+          console.log(
+            "✅ Carga de sala completada:",
+            sala ? "éxito" : "sin datos"
+          );
+        })
+        .catch((err) => {
+          console.error("❌ Error en carga de sala:", err);
+          this.showError("Error cargando la sala: " + err.message);
+        });
+
+      // Configurar guardado automático
+      this.setupAutoSave();
+
+      // Mostrar información de conexión
+      console.log(
+        `🔌 Conectado a sala #${this.salaId} - URL: ${window.location.href}`
+      );
+
+      // Agregar título de la sala en la interfaz si no existe
+      this.addSalaTitleToUI();
+    } catch (error) {
+      console.error("❌ Error inicializando sistema de sala:", error);
+      this.showError("Error inesperado: " + error.message);
+    }
+  }
+
+  static addSalaTitleToUI() {
+    // Agregar elemento para el título de la sala si no existe
+    const canvasHeader = document.querySelector(".canvas-header h5");
+    if (canvasHeader && !document.getElementById("sala-title")) {
+      const titleContainer = document.createElement("span");
+      titleContainer.id = "sala-title";
+      titleContainer.className = "ms-2 badge bg-primary";
+      titleContainer.textContent = "Cargando...";
+      canvasHeader.appendChild(titleContainer);
+    }
+  }
+
+  static getSalaIdFromURL() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const id = urlParams.get("id");
+
+      if (!id) {
+        console.warn('⚠️ No se encontró parámetro "id" en la URL');
+        return null;
+      }
+
+      // Intentar convertir a número para validar
+      const numId = parseInt(id, 10);
+      if (isNaN(numId) || numId <= 0) {
+        console.warn(`⚠️ ID inválido en la URL: "${id}"`);
+        return null;
+      }
+
+      return numId.toString();
+    } catch (error) {
+      console.error("❌ Error extrayendo ID de sala de la URL:", error);
+      return null;
+    }
+  }
+
+  static async loadSalaData(salaId) {
+    try {
+      // Si no se proporciona salaId, usar el de la URL
+      if (!salaId) {
+        salaId = this.getSalaIdFromURL();
+      }
+
+      if (!salaId) {
+        throw new Error("No se especificó ID de sala");
+      }
+
+      // Evitar cargas simultáneas
+      if (this.isLoading) {
+        console.log("🔄 Ya hay una carga en proceso, esperando...");
+        return null;
+      }
+
+      this.isLoading = true;
+      this.currentSalaId = salaId;
+      console.log(`� Cargando datos de la sala ${salaId} desde el servidor...`);
+
+      // Forzar limpieza completa de localStorage para evitar interferencias
+      for (const key in localStorage) {
+        if (key.startsWith("sala-") || key.startsWith("uml_diagram_")) {
+          console.log(`🧹 Limpiando localStorage: ${key}`);
+          localStorage.removeItem(key);
+        }
+      }
+      DiagramManager.clearAll();
+      ConnectionManager.connections = [];
+      DiagramManager.setStorageKey(`sala-${salaId}`);
+      this.showLoadingIndicator(true, "Cargando sala...");
+      let apiBaseUrl = "http://localhost:8083";
+      let response;
+      try {
+        const url = `${apiBaseUrl}/apis/sala/${salaId}`;
+        console.log(`📡 Intentando cargar desde: ${url}`);
+        response = await fetch(url);
+        console.log(`📨 Respuesta recibida - Status: ${response.status}`);
+      } catch (fetchError) {
+        console.warn(`⚠️ Error con URL ${apiBaseUrl}: ${fetchError.message}`);
+        console.log("🔄 Intentando con URL alternativa...");
+        apiBaseUrl = "http://localhost:8083";
+        try {
+          const altUrl = `${apiBaseUrl}/apis/sala/${salaId}`;
+          console.log(`📡 Intentando cargar desde URL alternativa: ${altUrl}`);
+          response = await fetch(altUrl);
+          console.log(`📨 Respuesta alternativa - Status: ${response.status}`);
+        } catch (altFetchError) {
+          throw new Error(
+            `No se pudo conectar con el servidor: ${altFetchError.message}`
+          );
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Error al cargar la sala: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+      console.log(`📊 Datos JSON completos recibidos:`, data);
+
+      // Verificar estructura de datos
+      if (!data) {
+        throw new Error("No se recibieron datos de la sala");
+      }
+      let sala;
+      if (data.error !== undefined && Array.isArray(data.data)) {
+        if (data.data.length === 0) {
+          throw new Error(
+            "No se encontró información de la sala (array data vacío)"
+          );
+        }
+        sala = data.data[0];
+      }
+      // Caso 2: Respuesta es un array directamente
+      else if (Array.isArray(data)) {
+        console.log("📊 Detectado formato de respuesta: array[]");
+        if (data.length === 0) {
+          throw new Error(
+            "No se encontró información de la sala (array vacío)"
+          );
+        }
+        sala = data[0];
+      } else {
+        sala = data;
+      }
+      console.log(`🏢 Sala encontrada:`, sala);
+
+      if (!sala || typeof sala !== "object") {
+        throw new Error("Formato de respuesta inválido");
+      }
+      if (!sala.id) {
+        console.warn("⚠️ La sala no tiene ID, usando el ID de la URL");
+        sala.id = this.salaId; // Usar el ID de la URL como fallback
+      }
+      this.currentSalaId = sala.id;
+      document.title = `Pizarra - ${sala.title || "Sin título"}`;
+      const salaTitle = document.getElementById("sala-title");
+      if (salaTitle) {
+        salaTitle.textContent = sala.title || "Sala sin título";
+      }
+      if (sala.xml === undefined) {
+        console.warn("⚠️ El campo XML no existe en el objeto sala");
+      } else {
+        console.log("📄 Valor de XML:", sala.xml);
+      }
+      if (sala.xml && typeof sala.xml === "string" && sala.xml.trim() !== "") {
+        setTimeout(() => {
+          try {
+            const loadSuccess = DiagramManager.loadDiagramFromXML(sala.xml);
+            if (!loadSuccess) {
+              console.warn(
+                "⚠️ Hubo un problema cargando el XML, iniciando diagrama vacío"
+              );
+              DiagramManager.clearAll();
+              this.showToast(
+                "⚠️ No se pudo cargar el diagrama anterior",
+                "warning"
+              );
+            } else {
+              this.showToast("✅ Sala cargada correctamente", "success");
+            }
+          } catch (xmlError) {
+            console.error("❌ Error procesando XML:", xmlError);
+            console.error("📄 XML problemático:", sala.xml);
+            DiagramManager.clearAll();
+            this.showToast("⚠️ Error al procesar el diagrama", "warning");
+          }
+        }, 300);
+      } else {
+        console.warn("⚠️ La sala no tiene datos XML válidos:", sala.xml);
+        DiagramManager.clearAll();
+        this.showToast("⚠️ La sala está vacía - Comienza a dibujar", "warning");
+      }
+
+      return sala;
+    } catch (error) {
+      console.error("❌ Error cargando datos de la sala:", error);
+      this.showError(`Error cargando la sala: ${error.message}`);
+      return null;
+    } finally {
+      setTimeout(() => {
+        this.isLoading = false;
+        this.showLoadingIndicator(false);
+        console.log(`🏁 Carga de sala finalizada`);
+      }, 500);
+    }
+  }
+
+  static showLoadingIndicator(show, message = "Cargando...") {
+    let indicator = document.getElementById("loading-indicator");
+
+    if (!indicator && show) {
+      indicator = document.createElement("div");
+      indicator.id = "loading-indicator";
+      indicator.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(255, 255, 255, 0.8);
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 9999;
+                    `;
+
+      const spinner = document.createElement("div");
+      spinner.className = "spinner-border text-primary";
+      spinner.setAttribute("role", "status");
+
+      const messageEl = document.createElement("div");
+      messageEl.className = "mt-3 text-primary fw-bold";
+      messageEl.textContent = message;
+
+      indicator.appendChild(spinner);
+      indicator.appendChild(messageEl);
+      document.body.appendChild(indicator);
+    } else if (indicator && !show) {
+      indicator.remove();
+    }
+  }
+
+  static showToast(message, type = "info") {
+    const colors = {
+      success: "#10b981",
+      error: "#ef4444",
+      warning: "#f59e0b",
+      info: "#3b82f6",
+    };
+
+    let toastContainer = document.getElementById("toast-container");
+    if (!toastContainer) {
+      toastContainer = document.createElement("div");
+      toastContainer.id = "toast-container";
+      toastContainer.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        z-index: 9999;
+                    `;
+      document.body.appendChild(toastContainer);
+    }
+
+    const toast = document.createElement("div");
+    toast.style.cssText = `
+                    background-color: ${colors[type] || colors.info};
+                    color: white;
+                    padding: 12px 20px;
+                    margin-bottom: 10px;
+                    border-radius: 6px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+                    animation: fadeIn 0.3s ease;
+                    font-weight: 500;
+                `;
+    toast.innerHTML = message;
+
+    toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.animation = "fadeOut 0.3s ease";
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  static clearLocalStorage() {
+    console.log(
+      `🧹 Limpiando localStorage para evitar datos mezclados entre salas`
+    );
+    // Eliminar datos de DiagramManager para esta sala específica
+    const storageKey = DiagramManager.getStorageKey();
+    console.log(`🔑 Eliminando clave: ${storageKey}`);
+    localStorage.removeItem(storageKey);
+
+    // También limpiar cualquier dato anterior que podría tener la clave estática
+    localStorage.removeItem("uml_diagram_data");
+  }
+
+  static loadDiagramFromXML(xmlData) {
+    try {
+      console.log("🔄 Parseando datos del diagrama desde el servidor...");
+      console.log("📄 Tipo de datos recibidos:", typeof xmlData);
+
+      // 🎯 ACTIVAR MODO SEGURO PARA CARGA DE DIAGRAMAS AI
+      if (this.isSelectingForAI || window.BLOCK_ALL_SOCKET_IO) {
+        console.log(
+          "🤖 Cargando diagrama generado por AI - modo seguro activo"
+        );
+        window.BLOCK_ALL_SOCKET_IO = true;
+        this.isSelectingForAI = true;
+      }
+
+      // Si ya es un objeto, no necesitamos parsear
+      if (typeof xmlData === "object" && xmlData !== null) {
+        console.log(
+          "✅ Los datos ya están en formato objeto, no es necesario parsear"
+        );
+        const result = this.processDiagramData(xmlData);
+
+        // Desactivar modo seguro después de la carga
+        setTimeout(() => {
+          window.BLOCK_ALL_SOCKET_IO = false;
+          this.isSelectingForAI = false;
+          console.log("🔓 Modo seguro desactivado después de carga AI");
+        }, 500);
+
+        return result;
+      }
+
+      // Verificar si hay datos para parsear
+      if (!xmlData || (typeof xmlData === "string" && xmlData.trim() === "")) {
+        console.warn("⚠️ XML/JSON vacío, creando diagrama nuevo");
+        DiagramManager.clearAll();
+        return false;
+      }
+
+      // Mostrar preview de los datos para diagnóstico
+      if (typeof xmlData === "string") {
+        console.log(
+          "📄 Datos recibidos (primeros 100 caracteres):",
+          xmlData.substring(0, 100) + (xmlData.length > 100 ? "..." : "")
+        );
+      }
+
+      // Intentar parsear el XML como JSON con manejo de errores robusto
+      let diagramData;
+      try {
+        diagramData = JSON.parse(xmlData);
+        console.log("✅ Parseo JSON exitoso al primer intento");
+      } catch (parseError) {
+        console.error("❌ Error parseando JSON:", parseError);
+        console.log("⚠️ Intentando parsear como string crudo...");
+
+        try {
+          // 1. Intentar eliminar comillas escapadas
+          let cleanedXml = xmlData.replace(/\\"/g, '"');
+          try {
+            diagramData = JSON.parse(cleanedXml);
+            console.log(
+              "✅ Parseo JSON exitoso después de eliminar comillas escapadas"
+            );
+          } catch (innerError) {
+            console.log("⚠️ Primer intento fallido, probando más limpiezas...");
+
+            // 2. Intentar con otro formato de escape común
+            cleanedXml = cleanedXml.replace(/\\\\/g, "\\");
+            try {
+              diagramData = JSON.parse(cleanedXml);
+              console.log("✅ Parseo JSON exitoso después de segunda limpieza");
+            } catch (innerError2) {
+              // 3. Buscar JSON dentro de string
+              console.log(
+                "⚠️ Segundo intento fallido, buscando JSON válido dentro del string..."
+              );
+              const jsonMatch = cleanedXml.match(/{[\s\S]*}/);
+              if (jsonMatch) {
+                try {
+                  diagramData = JSON.parse(jsonMatch[0]);
+                  console.log(
+                    "✅ Parseo JSON exitoso después de extraer JSON del string"
+                  );
+                } catch (innerError3) {
+                  throw new Error("No se pudo extraer JSON válido del XML");
+                }
+              } else {
+                throw new Error("No se encontró estructura JSON en el XML");
+              }
+            }
+          }
+        } catch (cleaningError) {
+          console.error(
+            "❌ Todos los intentos de parseo fallaron:",
+            cleaningError
+          );
+          throw new Error(
+            `No se pudo parsear el XML/JSON: ${cleaningError.message}`
+          );
+        }
+      }
+
+      if (!diagramData) {
+        throw new Error("Los datos del diagrama son nulos después del parseo");
+      }
+
+      console.log("📊 Datos parseados desde servidor:", diagramData);
+
+      // Guardar en localStorage con la nueva clave específica de sala
+      localStorage.setItem(DiagramManager.getStorageKey(), xmlData);
+      console.log(
+        `💾 Actualizado localStorage con clave: ${DiagramManager.getStorageKey()}`
+      );
+
+      // Procesar los datos parseados utilizando el nuevo método
+      return this.processDiagramData(diagramData);
+    } catch (error) {
+      console.error("❌ Error procesando XML del diagrama:", error);
+      console.error("📄 Datos XML problemáticos:", xmlData);
+      alert(`Error al cargar el diagrama: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Método para procesar datos del diagrama después de parsear
+  static processDiagramData(diagramData) {
+    try {
+      console.log("🔍 Procesando datos del diagrama:", diagramData);
+
+      // Verificar la estructura de los datos
+      if (!diagramData) {
+        console.warn("⚠️ Datos de diagrama nulos o vacíos");
+        return false;
+      }
+
+      // Limpiar el diagrama actual completamente antes de cargar
+      DiagramManager.clearAll();
+
+      // Buscar los elementos en diferentes posibles estructuras
+      let elementsData = null;
+
+      // Caso 1: Estructura directa {elements: {...}}
+      if (diagramData.elements) {
+        elementsData = diagramData.elements;
+        console.log("✅ Elementos encontrados en estructura principal");
+      }
+
+      // Caso 2: Estructura anidada diagramData.data.elements
+      if (!elementsData && diagramData.data && diagramData.data.elements) {
+        elementsData = diagramData.data.elements;
+        console.log("✅ Elementos encontrados en diagramData.data");
+      }
+
+      // Caso 3: Estructura anidada diagramData.diagram.elements
+      if (
+        !elementsData &&
+        diagramData.diagram &&
+        diagramData.diagram.elements
+      ) {
+        elementsData = diagramData.diagram.elements;
+        console.log("✅ Elementos encontrados en diagramData.diagram");
+      }
+
+      // Esperar un poco para asegurar que el DOM se ha limpiado
+      setTimeout(() => {
+        // Cargar elementos si existen
+        if (elementsData) {
+          console.log(
+            "📦 Cargando elementos:",
+            typeof elementsData === "object"
+              ? Array.isArray(elementsData)
+                ? elementsData.length
+                : Object.keys(elementsData).length
+              : "formato desconocido"
+          );
+
+          // Verificar y convertir elementos si es necesario
+          const elementData = Array.isArray(elementsData)
+            ? elementsData
+            : Object.values(elementsData);
+
+          console.log("🧩 Elementos convertidos para cargar:", elementData);
+
+          if (elementData && elementData.length > 0) {
+            elementData.forEach((element) => {
+              try {
+                if (!element) {
+                  console.warn("⚠️ Elemento nulo encontrado");
+                  return;
+                }
+
+                if (!element.type) {
+                  console.warn("⚠️ Elemento sin tipo encontrado:", element);
+                  return;
+                }
+
+                console.log(
+                  `🔍 Procesando elemento ${element.id} de tipo ${element.type}:`,
+                  element
+                );
+
+                // Aplicar límites del canvas para elementos cargados
+                const canvas = document.getElementById("canvas");
+                let x = element.x || 100;
+                let y = element.y || 100;
+
+                if (canvas) {
+                  // Estimar tamaño basado en el tipo de elemento
+                  const elementWidth = element.type === "package" ? 150 : 120;
+                  const elementHeight = element.type === "note" ? 80 : 100;
+
+                  const canvasWidth = canvas.offsetWidth;
+                  const canvasHeight = canvas.offsetHeight;
+
+                  // Limitar posición dentro del canvas
+                  x = Math.max(0, Math.min(x, canvasWidth - elementWidth));
+                  y = Math.max(0, Math.min(y, canvasHeight - elementHeight));
+                }
+
+                // Crear elemento basado en su tipo
+                let newElement;
+                switch (element.type) {
+                  case "class":
+                    newElement = new UMLClass(
+                      element.id || `element_${DiagramManager.idCounter++}`,
+                      x,
+                      y,
+                      element.name || "NuevaClase"
+                    );
+                    newElement.stereotype = element.stereotype || "";
+                    newElement.visibility = element.visibility || "public";
+                    newElement.attributes = Array.isArray(element.attributes)
+                      ? element.attributes
+                      : [];
+                    newElement.methods = Array.isArray(element.methods)
+                      ? element.methods
+                      : [];
+                    break;
+                  case "enum":
+                    newElement = new UMLEnum(
+                      element.id || `element_${DiagramManager.idCounter++}`,
+                      x,
+                      y,
+                      element.name || "NuevaEnumeracion"
+                    );
+                    newElement.values = Array.isArray(element.values)
+                      ? element.values
+                      : [];
+                    break;
+                  case "package":
+                    newElement = new UMLPackage(
+                      element.id || `element_${DiagramManager.idCounter++}`,
+                      x,
+                      y,
+                      element.name || "NuevoPaquete"
+                    );
+                    newElement.description = element.description || "";
+                    break;
+                  case "note":
+                    newElement = new UMLNote(
+                      element.id || `element_${DiagramManager.idCounter++}`,
+                      x,
+                      y,
+                      element.text || "Nueva nota"
+                    );
+                    break;
+                  default:
+                    console.warn(
+                      `⚠️ Tipo de elemento desconocido: ${element.type}`
+                    );
+                    return;
+                }
+
+                // Agregar el elemento al diagrama
+                if (newElement) {
+                  DiagramManager.elements.set(newElement.id, newElement);
+                  DiagramManager.addToCanvas(newElement);
+                  console.log(
+                    `✅ Elemento creado y agregado: ${newElement.id}`
+                  );
+                }
+              } catch (elementError) {
+                console.error(
+                  `❌ Error procesando elemento:`,
+                  element,
+                  elementError
+                );
+              }
+            });
+          }
+        } else {
+          console.warn(
+            "⚠️ No se encontraron elementos en ninguna estructura conocida"
+          );
+        }
+
+        // Buscar conexiones en diferentes posibles estructuras
+        let connectionsData = null;
+
+        // Caso 1: Estructura directa {connections: [...]}
+        if (diagramData.connections) {
+          connectionsData = diagramData.connections;
+          console.log("✅ Conexiones encontradas en estructura principal");
+        }
+
+        // Caso 2: Estructura anidada diagramData.data.connections
+        if (
+          !connectionsData &&
+          diagramData.data &&
+          diagramData.data.connections
+        ) {
+          connectionsData = diagramData.data.connections;
+          console.log("✅ Conexiones encontradas en diagramData.data");
+        }
+
+        // Caso 3: Estructura anidada diagramData.diagram.connections
+        if (
+          !connectionsData &&
+          diagramData.diagram &&
+          diagramData.diagram.connections
+        ) {
+          connectionsData = diagramData.diagram.connections;
+          console.log("✅ Conexiones encontradas en diagramData.diagram");
+        }
+
+        // Cargar conexiones si existen
+        if (connectionsData && Array.isArray(connectionsData)) {
+          console.log(
+            "🔗 Cargando conexiones:",
+            connectionsData.length,
+            "conexiones"
+          );
+          ConnectionManager.connections = connectionsData;
+          ConnectionManager.updateConnections();
+        } else {
+          console.warn(
+            "⚠️ No hay conexiones en el diagrama o formato inválido"
+          );
+          ConnectionManager.connections = [];
+        }
+
+        console.log("✅ Diagrama cargado exitosamente desde servidor");
+
+        // Forzar actualización de la vista y las conexiones
+        ConnectionManager.updateConnections();
+      }, 100);
+
+      return true;
+    } catch (error) {
+      console.error("❌ Error procesando datos del diagrama:", error);
+      DiagramManager.clearAll();
+      return false;
+    }
+  }
+
+  static loadElements(elementsData) {
+    console.log("📦 Procesando elementos:", elementsData);
+
+    let elements = [];
+
+    // Manejar diferentes formatos de datos
+    if (Array.isArray(elementsData)) {
+      elements = elementsData.map((el, index) => [index, el]);
+    } else if (elementsData instanceof Map) {
+      elements = Array.from(elementsData.entries());
+    } else if (typeof elementsData === "object" && elementsData !== null) {
+      elements = Object.entries(elementsData);
+    }
+
+    console.log(`🔧 Recreando ${elements.length} elementos...`);
+
+    elements.forEach(([id, elementData]) => {
+      try {
+        console.log(`📝 Recreando elemento ${id}:`, elementData);
+        this.recreateElement(elementData);
+      } catch (error) {
+        console.error(`❌ Error recreando elemento ${id}:`, elementData, error);
+      }
+    });
+
+    console.log(`✅ ${elements.length} elementos procesados`);
+  }
+
+  static recreateElement(elementData) {
+    if (!elementData || !elementData.type) {
+      console.warn("⚠️ Datos de elemento inválidos:", elementData);
+      return;
+    }
+
+    let element;
+
+    try {
+      switch (elementData.type) {
+        case "class":
+          element = new UMLClass(
+            elementData.id,
+            elementData.x || 100,
+            elementData.y || 100,
+            elementData.name || "Clase Sin Nombre"
+          );
+          element.stereotype = elementData.stereotype || "";
+          element.visibility = elementData.visibility || "public";
+          element.attributes = elementData.attributes || [];
+          element.methods = elementData.methods || [];
+          break;
+
+        case "enum":
+          element = new UMLEnum(
+            elementData.id,
+            elementData.x || 100,
+            elementData.y || 100,
+            elementData.name || "Enum Sin Nombre"
+          );
+          element.values = elementData.values || [];
+          break;
+
+        case "package":
+          element = new UMLPackage(
+            elementData.id,
+            elementData.x || 100,
+            elementData.y || 100,
+            elementData.name || "Paquete Sin Nombre"
+          );
+          element.description = elementData.description || "";
+          break;
+
+        case "note":
+          element = new UMLNote(
+            elementData.id,
+            elementData.x || 100,
+            elementData.y || 100,
+            elementData.text || "Nueva nota"
+          );
+          break;
+
+        default:
+          console.warn("⚠️ Tipo de elemento desconocido:", elementData.type);
+          return;
+      }
+
+      // Agregar al manager y al canvas
+      DiagramManager.elements.set(element.id, element);
+      DiagramManager.addToCanvas(element);
+
+      // Actualizar el contador de ID para evitar conflictos
+      const numericId = parseInt(element.id.replace("element_", ""));
+      if (!isNaN(numericId) && numericId >= DiagramManager.idCounter) {
+        DiagramManager.idCounter = numericId + 1;
+      }
+
+      console.log(
+        `✅ Elemento ${elementData.type} recreado exitosamente:`,
+        element.id
+      );
+    } catch (error) {
+      console.error("❌ Error creando elemento:", error);
+    }
+  }
+
+  static setupAutoSave() {
+    // Solo guardar al salir de la página
+    window.addEventListener("beforeunload", () => {
+      this.saveDiagram();
+    });
+    console.log("🚫 Guardado por intervalo DESHABILITADO en SalaManager");
+  }
+
+  static markAsChanged() {
+    // Guardar inmediatamente cuando se marca un cambio
+    console.log("💾 Guardando inmediatamente por cambio marcado");
+    this.saveDiagram();
+  }
+
+  static async saveDiagram() {
+    // 🚫 BLOQUEAR GUARDADO DURANTE MODO SEGURO
+    if (window.BLOCK_ALL_SOCKET_IO) {
+      console.log(
+        "🚫 saveDiagram BLOQUEADO - modo seguro activo (selección visual)"
+      );
+      return;
+    }
+
+    // Usar la sala ID actual (puede ser diferente de this.salaId si se cambió)
+    const salaId = this.currentSalaId || this.salaId;
+
+    if (!salaId) {
+      console.error("❌ No hay ID de sala para guardar");
+      return;
+    }
+
+    // No intentar guardar si estamos cargando datos
+    if (this.isLoading) {
+      console.log("⏳ Carga en proceso, se omitirá el guardado");
+      return;
+    }
+
+    console.log(`💾 Guardando diagrama en sala ${salaId}...`);
+
+    try {
+      // Verificar que haya elementos para guardar
+      const elementsCount = DiagramManager.elements.size;
+      console.log(`📊 Elementos a guardar: ${elementsCount}`);
+
+      // Obtener el estado actual del diagrama
+      const diagramData = this.getCurrentDiagramState();
+      const xmlData = JSON.stringify(diagramData);
+
+      // Registrar tamaño de los datos para diagnóstico
+      console.log(`📏 Tamaño de los datos a guardar: ${xmlData.length} bytes`);
+
+      // Hacer la petición al servidor
+      const url = `http://localhost:8083/apis/sala/${salaId}`;
+      console.log(`📡 Enviando datos a: ${url}`);
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          xml: xmlData,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      // Procesar la respuesta
+      try {
+        const result = await response.json();
+        console.log(
+          "✅ Diagrama guardado exitosamente en el servidor:",
+          result
+        );
+      } catch (jsonError) {
+        console.warn(
+          "⚠️ No se pudo parsear la respuesta como JSON, pero el guardado fue exitoso"
+        );
+        console.log(
+          "📄 Texto de respuesta:",
+          await response.text().catch(() => "No disponible")
+        );
+      }
+
+      // Guardar en localStorage también como respaldo
+      localStorage.setItem(DiagramManager.getStorageKey(), xmlData);
+
+      // Mostrar confirmación
+      this.showSaveStatus(true);
+    } catch (error) {
+      console.error("❌ Error guardando diagrama:", error);
+      console.error(
+        "📄 URL que falló:",
+        `http://localhost:8083/apis/sala/${salaId}`
+      );
+      this.showSaveStatus(false, error.message);
+    }
+  }
+
+  static getCurrentDiagramState() {
+    return {
+      elements: this.convertElementsToObject(DiagramManager.elements),
+      connections: ConnectionManager.connections || [],
+      timestamp: Date.now(),
+      version: "1.0",
+    };
+  }
+
+  static convertElementsToObject(elementsMap) {
+    const elementsObject = {};
+    for (const [id, element] of elementsMap) {
+      elementsObject[id] = {
+        id: element.id,
+        type: element.type,
+        x: element.x,
+        y: element.y,
+        name: element.name,
+        stereotype: element.stereotype || "",
+        visibility: element.visibility || "public",
+        attributes: element.attributes || [],
+        methods: element.methods || [],
+        values: element.values || [],
+        description: element.description || "",
+        text: element.text || "",
+      };
+    }
+    return elementsObject;
+  }
+
+  static showSaveStatus(success, errorMessage = "") {
+    // Crear elemento de estado si no existe
+    let statusElement = document.getElementById("save-status");
+    if (!statusElement) {
+      statusElement = document.createElement("div");
+      statusElement.id = "save-status";
+      statusElement.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        padding: 10px 15px;
+                        border-radius: 5px;
+                        color: white;
+                        font-size: 14px;
+                        font-weight: 500;
+                        z-index: 1000;
+                        transition: all 0.3s ease;
+                        opacity: 0;
+                    `;
+      document.body.appendChild(statusElement);
+    }
+
+    if (success) {
+      statusElement.style.backgroundColor = "#10b981";
+      statusElement.innerHTML =
+        '<i class="fas fa-check-circle me-1"></i>Guardado exitosamente';
+    } else {
+      statusElement.style.backgroundColor = "#ef4444";
+      statusElement.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>Error: ${errorMessage}`;
+    }
+
+    // Mostrar
+    statusElement.style.opacity = "1";
+
+    // Ocultar después de 3 segundos
+    setTimeout(() => {
+      statusElement.style.opacity = "0";
+    }, 3000);
+  }
+
+  static showXmlViewer() {
+    // Verificar si ya hay un visor abierto y cerrarlo
+    const existingViewer = document.getElementById("xml-viewer-container");
+    if (existingViewer) {
+      document.body.removeChild(existingViewer);
+      return;
+    }
+
+    try {
+      // Crear contenedor modal
+      const viewerContainer = document.createElement("div");
+      viewerContainer.id = "xml-viewer-container";
+      viewerContainer.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.7);
+                        z-index: 9999;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    `;
+
+      // Obtener los datos actuales
+      const diagramData = this.getCurrentDiagramState();
+      const xmlData = JSON.stringify(diagramData, null, 2);
+
+      // Crear contenido modal
+      const modalContent = document.createElement("div");
+      modalContent.style.cssText = `
+                        width: 80%;
+                        height: 80%;
+                        background-color: white;
+                        border-radius: 8px;
+                        padding: 20px;
+                        display: flex;
+                        flex-direction: column;
+                        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+                    `;
+
+      // Crear header
+      const header = document.createElement("div");
+      header.style.cssText = `
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 15px;
+                    `;
+
+      const title = document.createElement("h4");
+      title.innerText = `XML/JSON de Sala ID: ${this.salaId}`;
+      title.style.margin = "0";
+
+      const closeButton = document.createElement("button");
+      closeButton.innerHTML = '<i class="fas fa-times"></i>';
+      closeButton.className = "btn btn-sm btn-outline-secondary";
+      closeButton.onclick = () => document.body.removeChild(viewerContainer);
+
+      header.appendChild(title);
+      header.appendChild(closeButton);
+
+      // Crear área de texto
+      const textArea = document.createElement("textarea");
+      textArea.value = xmlData;
+      textArea.style.cssText = `
+                        width: 100%;
+                        height: 100%;
+                        flex: 1;
+                        padding: 10px;
+                        font-family: monospace;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        resize: none;
+                        white-space: pre;
+                        overflow: auto;
+                    `;
+      textArea.readOnly = true;
+
+      // Ensamblar modal
+      modalContent.appendChild(header);
+      modalContent.appendChild(textArea);
+      viewerContainer.appendChild(modalContent);
+      document.body.appendChild(viewerContainer);
+
+      // Permitir cerrar haciendo clic fuera del modal
+      viewerContainer.addEventListener("click", function (event) {
+        if (event.target === this) {
+          document.body.removeChild(this);
+        }
+      });
+
+      console.log("📄 Mostrando visor de XML/JSON");
+    } catch (error) {
+      console.error("❌ Error mostrando visor XML/JSON:", error);
+      this.showError("Error al mostrar el visor de XML/JSON: " + error.message);
+    }
+  }
+
+  static showError(message) {
+    const errorDiv = document.createElement("div");
+    errorDiv.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: #ef4444;
+                    color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 500;
+                    z-index: 1000;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                `;
+    errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
+    document.body.appendChild(errorDiv);
+
+    setTimeout(() => {
+      errorDiv.remove();
+    }, 5000);
+  }
+}
+
+// ============== INTEGRACIÓN SIMPLE CON GUARDADO AUTOMÁTICO ==============
+
+// Interceptar PersistenceManager para auto-guardar
+if (typeof PersistenceManager !== "undefined") {
+  const originalMarkAsChanged = PersistenceManager.markAsChanged;
+
+  PersistenceManager.markAsChanged = function () {
+    const result = originalMarkAsChanged?.call(this);
+
+    // Marcar para guardado automático
+    if (SalaManager.salaId) {
+      SalaManager.markAsChanged();
+    }
+
+    return result;
+  };
+} else {
+  // Si no existe PersistenceManager, crear uno simple
+  window.PersistenceManager = {
+    markAsChanged: function () {
+      if (SalaManager.salaId) {
+        SalaManager.markAsChanged();
+      }
+    },
+  };
+}
+
+// ============== SISTEMA COLABORATIVO EN TIEMPO REAL ==============
+
+class PizarraColaborativa {
+  constructor() {
+    this.socket = null;
+    this.salaId = null;
+    this.usuarioInfo = null;
+    this.usuariosConectados = new Map();
+    this.isConnected = false;
+    this.lastSyncTime = null;
+    this.syncQueue = [];
+    this.isProcessingSync = false;
+
+    this.init();
+  }
+
+  async init() {
+    try {
+      console.log("🚀 Inicializando sistema colaborativo...");
+
+      // Obtener información de la sala y usuario
+      await this.loadUserAndRoomInfo();
+
+      // Inicializar Socket.IO solo si tenemos información válida
+      if (this.usuarioInfo && this.salaId) {
+        this.initSocket();
+        console.log("✅ Sistema colaborativo inicializado correctamente");
+
+        // Mostrar notificación de bienvenida
+        setTimeout(() => {
+          this.showNotification(`Hola ${this.usuarioInfo.name}`, "success");
+        }, 2000);
+      } else {
+        throw new Error("No se pudo obtener información del usuario o sala");
+      }
+    } catch (error) {
+      console.error("❌ Error inicializando sistema colaborativo:", error);
+      this.showNotification(
+        "Error inicializando sistema colaborativo",
+        "error"
+      );
+
+      // Permitir que la pizarra funcione sin colaboración
+      this.enableOfflineMode();
+    }
+  }
+
+  enableOfflineMode() {
+    console.log("📴 Modo offline activado - Sin colaboración en tiempo real");
+    this.updateSyncStatus("disconnected");
+
+    // Ocultar barra de colaboración
+    const collaborationHeader = document.getElementById("collaboration-header");
+    if (collaborationHeader) {
+      collaborationHeader.style.display = "none";
+    }
+
+    // Ajustar el canvas
+    const canvasWrapper = document.querySelector(".canvas-wrapper");
+    if (canvasWrapper) {
+      canvasWrapper.style.top = "60px";
+    }
+  }
+
+  // Método de debug para mostrar estado actual
+  debugStatus() {
+    console.log("🔍 ESTADO ACTUAL DE LA PIZARRA COLABORATIVA:");
+    console.log("==========================================");
+    console.log("🌐 Conectado al servidor:", this.isConnected);
+    console.log("🆔 Socket ID:", this.socket?.id);
+    console.log("🏠 Sala ID:", this.salaId);
+    console.log("👤 Usuario:", this.usuarioInfo);
+    console.log("👥 Usuarios conectados:", this.usuariosConectados.size);
+    console.log(
+      "⏰ Última sincronización:",
+      this.lastSyncTime ? new Date(this.lastSyncTime) : "Nunca"
+    );
+    console.log(
+      "📊 Elementos en la pizarra:",
+      window.DiagramManager?.elements?.size || 0
+    );
+    console.log("==========================================");
+
+    // También mostrar en la UI
+    this.showNotification(
+      `Debug: ${this.isConnected ? "Conectado" : "Desconectado"} - Usuario: ${
+        this.usuarioInfo?.name
+      } - Sala: ${this.salaId}`,
+      "info",
+      5000
+    );
+  }
+
+  async loadUserAndRoomInfo() {
+    // 🔍 DEBUG COMPLETO DE URL Y SALA
+    console.log("🌐 DEBUG URL:", {
+      fullURL: window.location.href,
+      search: window.location.search,
+      hash: window.location.hash,
+      pathname: window.location.pathname,
+    });
+
+    // Obtener sala ID de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    this.salaId = urlParams.get("id") || "default";
+
+    console.log("🏠 DEBUG SALA ID:", {
+      salaIdExtraido: this.salaId,
+      tipoSalaId: typeof this.salaId,
+      parametroId: urlParams.get("id"),
+      todosParametros: Object.fromEntries(urlParams.entries()),
+    });
+
+    console.log("🔍 DEBUG: Buscando información de usuario...");
+    console.log("🔍 DEBUG: localStorage completo:", {
+      userId: localStorage.getItem("userId"),
+      userName: localStorage.getItem("userName"),
+      userEmail: localStorage.getItem("userEmail"),
+      token: localStorage.getItem("token"),
+      userType: localStorage.getItem("userType"),
+      salaId: localStorage.getItem("salaId"),
+    });
+
+    // Intentar múltiples fuentes de información del usuario
+    let userId =
+      localStorage.getItem("userId") || localStorage.getItem("user_id");
+    let userName =
+      localStorage.getItem("userName") ||
+      localStorage.getItem("userEmail") ||
+      localStorage.getItem("user_name");
+    let userType = localStorage.getItem("userType") || "guest";
+
+    // Si no hay información de usuario, crear usuario temporal
+    if (!userId || !userName) {
+      console.log(
+        "⚠️ No se encontró información de usuario, creando usuario temporal"
+      );
+      userId =
+        "temp_user_" +
+        Date.now() +
+        "_" +
+        Math.random().toString(36).substr(2, 9);
+      userName = "Invitado" + Math.floor(Math.random() * 1000);
+      userType = "temporary";
+
+      // Guardar información temporal en localStorage
+      localStorage.setItem("userId", userId);
+      localStorage.setItem("userName", userName);
+      localStorage.setItem("userType", userType);
+
+      console.log("✅ Usuario temporal creado:", {
+        userId,
+        userName,
+        userType,
+      });
+    } else {
+      console.log("✅ Información de usuario encontrada:", {
+        userId,
+        userName,
+        userType,
+      });
+    }
+
+    this.usuarioInfo = {
+      id: userId,
+      name: userName,
+      type: userType,
+      salaId: this.salaId,
+      avatar: this.generateAvatar(userName),
+    };
+
+    console.log("👤 Usuario completo:", this.usuarioInfo);
+    console.log("🏠 Sala:", this.salaId);
+
+    // Intentar obtener información real del usuario si está disponible
+    await this.tryToLoadRealUserInfo();
+  }
+
+  async tryToLoadRealUserInfo() {
+    try {
+      console.log("🔍 Intentando obtener información real del usuario...");
+
+      // Verificar si hay un token de autenticación
+      const token = localStorage.getItem("token");
+
+      if (token) {
+        console.log("🔑 Token encontrado, verificando con el servidor...");
+
+        // Intentar obtener información del usuario del backend
+        const response = await fetch("http://localhost:8083/apis/auth/verify", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          console.log("✅ Información real del usuario obtenida:", userData);
+
+          // Verificar si es un usuario invitado a esta sala específica
+          await this.checkIfUserIsInvited(userData.id);
+
+          // Actualizar información del usuario
+          this.usuarioInfo = {
+            ...this.usuarioInfo,
+            id: userData.id || this.usuarioInfo.id,
+            name: userData.name || userData.email || this.usuarioInfo.name,
+            email: userData.email,
+            type: this.isUserInvited ? "invited" : "owner",
+            isAuthenticated: true,
+            isInvited: this.isUserInvited || false,
+            avatar: this.generateAvatar(
+              userData.name || userData.email || this.usuarioInfo.name
+            ),
+          };
+
+          console.log("✅ Usuario autenticado actualizado:", this.usuarioInfo);
+
+          // Actualizar localStorage
+          localStorage.setItem("userId", this.usuarioInfo.id);
+          localStorage.setItem("userName", this.usuarioInfo.name);
+
+          // Actualizar UI si ya está conectado
+          if (this.isConnected) {
+            this.updateUsersList();
+          }
+        } else {
+          console.log("⚠️ Token inválido o expirado");
+        }
+      } else {
+        console.log("ℹ️ No hay token, verificando si es usuario invitado...");
+
+        // Verificar si es un usuario invitado consultando usersala
+        await this.checkIfUserIsGuestInRoom();
+      }
+    } catch (error) {
+      console.log(
+        "ℹ️ Error obteniendo información real del usuario:",
+        error.message
+      );
+      console.log("📄 Usando información temporal/local");
+    }
+  }
+
+  async checkIfUserIsInvited(userId) {
+    try {
+      console.log(
+        `🔍 Verificando si usuario ${userId} es invitado a sala ${this.salaId}...`
+      );
+
+      const response = await fetch(
+        `http://localhost:8083/apis/usersala/user/${userId}/salas`
+      );
+      if (response.ok) {
+        const userSalas = await response.json();
+        this.isUserInvited = userSalas.some((sala) => sala.id == this.salaId);
+        console.log(
+          `👥 Usuario ${
+            this.isUserInvited ? "ES" : "NO ES"
+          } invitado a esta sala`
+        );
+        console.log(`📊 Salas del usuario:`, userSalas);
+        return this.isUserInvited;
+      }
+    } catch (error) {
+      console.log(
+        "⚠️ No se pudo verificar si el usuario es invitado:",
+        error.message
+      );
+      this.isUserInvited = false;
+    }
+    return false;
+  }
+
+  async checkIfUserIsGuestInRoom() {
+    try {
+      console.log(
+        `🔍 Verificando usuarios invitados en sala ${this.salaId}...`
+      );
+
+      const response = await fetch(
+        `http://localhost:8083/apis/usersala/sala/${this.salaId}`
+      );
+      if (response.ok) {
+        const usersInRoom = await response.json();
+        console.log("👥 Usuarios en la sala:", usersInRoom);
+
+        if (usersInRoom && usersInRoom.length > 0) {
+          // Si hay usuarios invitados, este usuario podría ser uno de ellos
+          this.usuarioInfo.type = "guest";
+          this.usuarioInfo.isGuest = true;
+          this.usuarioInfo.roomUsers = usersInRoom;
+
+          console.log("✅ Usuario identificado como invitado potencial");
+          console.log("📊 Información actualizada:", this.usuarioInfo);
+
+          return true;
+        }
+      }
+    } catch (error) {
+      console.log(
+        "ℹ️ No se pudo verificar usuarios en la sala:",
+        error.message
+      );
+    }
+    return false;
+  }
+
+  generateAvatar(name) {
+    const colors = [
+      "#3b82f6",
+      "#10b981",
+      "#f59e0b",
+      "#ef4444",
+      "#8b5cf6",
+      "#06b6d4",
+    ];
+    const initials = name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .substring(0, 2)
+      .toUpperCase();
+    const color = colors[name.length % colors.length];
+    return { initials, color };
+  }
+
+  initSocket() {
+    // Conectar al servidor Socket.IO con configuración más robusta
+    this.socket = io("http://localhost:8083", {
+      transports: ["websocket", "polling"],
+      forceNew: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000,
+    });
+
+    // Eventos de conexión
+    this.socket.on("connect", () => {
+      console.log("🟢 Conectado al servidor:", this.socket.id);
+      this.isConnected = true;
+      this.updateSyncStatus("connected");
+      this.joinRoom();
+    });
+
+    this.socket.on("disconnect", () => {
+      console.log("🔴 Desconectado del servidor");
+      this.isConnected = false;
+      this.updateSyncStatus("disconnected");
+    });
+
+    this.socket.on("connect_error", (error) => {
+      console.error("❌ Error de conexión:", error);
+      this.updateSyncStatus("error");
+      this.showNotification("Error de conexión al servidor", "error");
+    });
+
+    this.socket.on("reconnect", (attemptNumber) => {
+      console.log("🔄 Reconectado después de", attemptNumber, "intentos");
+      this.showNotification("Reconectado al servidor", "success");
+      this.joinRoom();
+    });
+
+    this.socket.on("reconnect_attempt", (attemptNumber) => {
+      console.log("🔄 Intento de reconexión:", attemptNumber);
+      this.updateSyncStatus("syncing");
+    });
+
+    this.socket.on("reconnect_error", (error) => {
+      console.error("❌ Error de reconexión:", error);
+      this.updateSyncStatus("error");
+    });
+
+    this.socket.on("reconnect_failed", () => {
+      console.error("❌ Falló la reconexión");
+      this.updateSyncStatus("error");
+      this.showNotification("No se pudo reconectar al servidor", "error", 5000);
+    });
+
+    // Eventos de sala
+    this.socket.on("estadoInicial", (data) => {
+      console.log("📥 RECIBIDO ESTADO INICIAL:", data);
+      console.log("🏠 Para sala:", this.salaId);
+      console.log("👤 Para usuario:", this.usuarioInfo.name);
+
+      if (data.state) {
+        // ✅ USAR LA FUNCIÓN EXISTENTE DE DiagramManager
+        if (
+          typeof DiagramManager !== "undefined" &&
+          DiagramManager.loadDiagramFromXML
+        ) {
+          console.log(
+            "🎯 Cargando estado inicial usando DiagramManager.loadDiagramFromXML"
+          );
+          const loadSuccess = DiagramManager.loadDiagramFromXML(
+            JSON.stringify(data.state)
+          );
+
+          if (loadSuccess) {
+            this.showNotification(
+              "✅ Estado de la pizarra cargado",
+              "success",
+              2000
+            );
+          } else {
+            this.showNotification(
+              "⚠️ Error cargando estado inicial",
+              "warning",
+              3000
+            );
+          }
+        } else {
+          // Fallback al método personalizado
+          console.log(
+            "⚠️ DiagramManager no disponible, usando método de fallback para estado inicial"
+          );
+          this.loadDiagramState(data.state);
+          this.showNotification(
+            "Estado de la pizarra cargado (fallback)",
+            "success",
+            2000
+          );
+        }
+      } else {
+        console.log("ℹ️ No hay estado inicial - pizarra vacía");
+        this.showNotification(
+          "Pizarra vacía - ¡Empieza a crear!",
+          "info",
+          2000
+        );
+      }
+    });
+
+    this.socket.on("diagramaActualizado", (data) => {
+      console.log("� RECIBIDO CAMBIO EN TIEMPO REAL:");
+      console.log(`   🎬 Acción: ${data.action}`);
+      console.log(
+        `   👤 De usuario: ${data.usuario?.name} (ID: ${data.usuario?.id})`
+      );
+      console.log(
+        `   🏠 Mi usuario: ${this.usuarioInfo?.name} (ID: ${this.usuarioInfo?.id})`
+      );
+      console.log(
+        `   🔍 Es mi cambio: ${data.usuario?.id === this.usuarioInfo?.id}`
+      );
+      console.log(`   📊 Datos:`, data.data);
+
+      if (data.usuario?.id !== this.usuarioInfo?.id) {
+        console.log(
+          "✅ 🚀 PROCESANDO cambio de otro usuario - ACTUALIZANDO PIZARRA"
+        );
+
+        // 🎨 Mostrar notificación visual
+        this.showNotification(
+          `📡 ${data.usuario?.name} hizo cambios`,
+          "info",
+          1500
+        );
+
+        this.handleRemoteChange(data);
+
+        console.log("✅ Cambio procesado exitosamente");
+      } else {
+        console.log("🔄 Ignorando mi propio cambio (evitar bucle)");
+      }
+    });
+
+    // ============== NUEVOS EVENTOS GRANULARES ==============
+
+    // Cambios instantáneos (movimientos, edición en vivo)
+    this.socket.on("cambioRecibido", (data) => {
+      try {
+        console.log(
+          `⚡ CAMBIO INSTANTÁNEO de ${data.usuario?.name}:`,
+          data.tipo
+        );
+
+        if (data.usuario?.id !== this.usuarioInfo?.id) {
+          this.procesarCambioInstantaneo(data);
+
+          // Mostrar cursor/indicador visual del otro usuario
+          this.mostrarIndicadorUsuario(data.usuario, data.tipo);
+        }
+      } catch (error) {
+        console.error("❌ Error procesando cambio instantáneo:", error);
+      }
+    });
+
+    // Operaciones con elementos (crear, eliminar, modificar)
+    this.socket.on("elementoOperado", (data) => {
+      console.log(
+        `🔄 ELEMENTO ${data.operacion.toUpperCase()} por ${
+          data.usuario?.name
+        }:`,
+        data.elemento.id
+      );
+
+      if (data.usuario?.id !== this.usuarioInfo?.id) {
+        this.procesarOperacionElemento(data);
+
+        // Mostrar notificación específica
+        const accion =
+          {
+            crear: "creó",
+            eliminar: "eliminó",
+            modificar: "modificó",
+          }[data.operacion] || "cambió";
+
+        this.showNotification(
+          `👤 ${data.usuario?.name} ${accion} un elemento`,
+          "info",
+          2000
+        );
+      }
+    });
+
+    // Manejo de errores de sincronización
+    this.socket.on("errorSincronizacion", (data) => {
+      console.error("❌ Error de sincronización:", data);
+      this.showNotification(
+        "Error de sincronización en tiempo real",
+        "error",
+        4000
+      );
+    });
+
+    this.socket.on("usuarioSalio", (data) => {
+      console.log("👋 Usuario salió:", data);
+      const usuario = this.usuariosConectados.get(data.usuarioId);
+      if (usuario) {
+        this.showNotification(`${usuario.name} salió de la pizarra`, "info");
+      }
+      this.removeUser(data.usuarioId);
+    });
+
+    this.socket.on("usuarioUnido", (data) => {
+      console.log("👋 Usuario se unió:", data);
+      if (data.usuario && data.usuario.id !== this.usuarioInfo.id) {
+        this.addUser(data.usuario);
+        const tipoUsuario = data.usuario.isInvited ? "invitado" : "colaborador";
+        this.showNotification(
+          `${data.usuario.name} (${tipoUsuario}) se unió a la pizarra`,
+          "success"
+        );
+      }
+    });
+
+    this.socket.on("usuariosConectados", (data) => {
+      console.log("👥 Lista de usuarios conectados recibida:", data);
+      if (data.usuarios && Array.isArray(data.usuarios)) {
+        // Limpiar lista actual y añadir usuarios conectados
+        this.usuariosConectados.clear();
+        data.usuarios.forEach((usuario) => {
+          if (usuario.id !== this.usuarioInfo.id) {
+            this.addUser(usuario);
+          }
+        });
+      }
+    });
+
+    this.socket.on("errorSincronizacion", (data) => {
+      console.error("❌ Error de sincronización:", data);
+      this.updateSyncStatus("error");
+      this.showNotification(`Error: ${data.message}`, "error");
+    });
+
+    // 🚀 NUEVO: Escuchar cambios de XML desde la base de datos
+    this.socket.on("xmlActualizado", (data) => {
+      console.log("🔄 Actualizando pizarra con nuevo estado...", data);
+
+      if (data.nuevoEstado) {
+        // Efecto visual para indicar actualización automática
+        const canvas = document.getElementById("canvas");
+        if (canvas) {
+          canvas.style.borderColor = "#4CAF50";
+          canvas.style.borderWidth = "3px";
+          setTimeout(() => {
+            canvas.style.borderColor = "";
+            canvas.style.borderWidth = "";
+          }, 1000);
+        }
+
+        // ✅ USAR LA FUNCIÓN EXISTENTE DE DiagramManager
+        if (
+          typeof DiagramManager !== "undefined" &&
+          DiagramManager.loadDiagramFromXML
+        ) {
+          const loadSuccess = DiagramManager.loadDiagramFromXML(
+            JSON.stringify(data.nuevoEstado)
+          );
+
+          if (loadSuccess) {
+            this.showNotification("✅", "success", 4000);
+          } else {
+            this.showNotification(
+              "⚠️ Error sincronizando pizarra",
+              "warning",
+              3000
+            );
+          }
+        } else {
+          this.loadDiagramState(data.nuevoEstado);
+          this.showNotification(
+            "🔄 Pizarra sincronizada (modo fallback)",
+            "success",
+            4000
+          );
+        }
+        this.updateSyncStatus("synced");
+      }
+    });
+
+    this.socket.on("solicitarEstadoActual", () => {
+      this.saveFullState();
+    });
+  }
+
+  joinRoom() {
+    if (!this.socket || !this.salaId || !this.usuarioInfo) {
+      console.error("❌ No se puede unir a la sala - datos faltantes:", {
+        hasSocket: !!this.socket,
+        salaId: this.salaId,
+        hasUserInfo: !!this.usuarioInfo,
+      });
+      return;
+    }
+
+    const salaIdNormalizado = parseInt(this.salaId, 10);
+    if (isNaN(salaIdNormalizado)) {
+      console.error("❌ salaId no es un número válido:", this.salaId);
+      return;
+    }
+    this.salaId = salaIdNormalizado;
+    this.socket.emit("unirseSala", {
+      salaId: this.salaId,
+      usuario: {
+        ...this.usuarioInfo,
+        socketId: this.socket.id,
+        joinTime: Date.now(),
+      },
+    });
+  }
+
+  loadDiagramState(state) {
+    try {
+      console.log("📊 INICIANDO CARGA DE DIAGRAMA...", state);
+      if (window.DiagramManager) {
+        DiagramManager.elements.clear();
+        const canvas = document.getElementById("canvas");
+        if (canvas) {
+          const elementsToRemove = canvas.querySelectorAll(".uml-element");
+          elementsToRemove.forEach((el) => el.remove());
+        }
+      }
+      let parsedState = state;
+      if (typeof state === "string") {
+        try {
+          parsedState = JSON.parse(state);
+        } catch (e) {
+          console.error("❌ Error parseando JSON:", e);
+          return;
+        }
+      }
+      let elementosCreados = 0;
+      if (parsedState && parsedState.elements) {
+        console.log("🔍 Procesando elementos...");
+        if (
+          typeof parsedState.elements === "object" &&
+          !Array.isArray(parsedState.elements)
+        ) {
+          console.log(
+            "📦 Formato objeto detectado:",
+            Object.keys(parsedState.elements).length,
+            "elementos"
+          );
+          Object.values(parsedState.elements).forEach((elementData) => {
+            console.log(
+              "➕ Recreando elemento:",
+              elementData.id,
+              elementData.type
+            );
+            if (this.createElementFromData(elementData)) {
+              elementosCreados++;
+            }
+          });
+        } else if (Array.isArray(parsedState.elements)) {
+          console.log(
+            "📦 Formato array detectado:",
+            parsedState.elements.length,
+            "elementos"
+          );
+          parsedState.elements.forEach((elementData) => {
+            if (this.createElementFromData(elementData)) {
+              elementosCreados++;
+            }
+          });
+        }
+      }
+      let conexionesCargadas = 0;
+      if (
+        parsedState &&
+        parsedState.connections &&
+        Array.isArray(parsedState.connections)
+      ) {
+        if (window.ConnectionManager) {
+          ConnectionManager.connections = parsedState.connections;
+          ConnectionManager.updateConnections();
+          conexionesCargadas = parsedState.connections.length;
+        }
+      }
+      setTimeout(() => {
+        if (window.DiagramManager) {
+          DiagramManager.redrawAll();
+          setTimeout(() => {
+            DiagramManager.redrawAll();
+            const canvas = document.getElementById("canvas");
+            if (canvas) {
+              const elementosEnDOM =
+                canvas.querySelectorAll(".uml-element").length;
+              console.log(
+                `🔍 VERIFICACIÓN: ${elementosEnDOM} elementos encontrados en DOM`
+              );
+            }
+          }, 100);
+        }
+      }, 50);
+      this.showNotification(
+        `✅ Pizarra actualizada: ${elementosCreados} elementos cargados`,
+        "success",
+        3000
+      );
+    } catch (error) {
+      console.error("❌ ERROR CRÍTICO cargando estado del diagrama:", error);
+      this.showNotification("❌ Error cargando pizarra", "error", 3000);
+    }
+  }
+
+  createElementFromData(data) {
+    try {
+      if (!window.DiagramManager) {
+        console.warn("⚠️ DiagramManager no disponible");
+        return false;
+      }
+      if (!data || !data.id || !data.type) {
+        console.warn("⚠️ Datos de elemento inválidos:", data);
+        return false;
+      }
+      let element;
+      switch (data.type) {
+        case "class":
+          element = new UMLClass(
+            data.id,
+            data.x || 50,
+            data.y || 50,
+            data.name || "Nueva Clase"
+          );
+          if (data.attributes) element.attributes = data.attributes;
+          if (data.methods) element.methods = data.methods;
+          if (data.stereotype) element.stereotype = data.stereotype;
+          if (data.visibility) element.visibility = data.visibility;
+          break;
+
+        case "enum":
+          element = new UMLEnum(
+            data.id,
+            data.x || 50,
+            data.y || 50,
+            data.name || "Nuevo Enum"
+          );
+          if (data.values) element.values = data.values;
+          break;
+
+        case "package":
+          element = new UMLPackage(
+            data.id,
+            data.x || 50,
+            data.y || 50,
+            data.name || "Nuevo Package"
+          );
+          if (data.description) element.description = data.description;
+          break;
+
+        case "note":
+          element = new UMLNote(
+            data.id,
+            data.x || 50,
+            data.y || 50,
+            data.text || "Nueva nota"
+          );
+          break;
+
+        default:
+          console.warn("⚠️ Tipo de elemento desconocido:", data.type);
+          return false;
+      }
+      if (element) {
+        DiagramManager.elements.set(data.id, element);
+        DiagramManager.addToCanvas(element);
+        const numId = parseInt(data.id.replace("element_", "")) || 0;
+        if (numId >= DiagramManager.idCounter) {
+          DiagramManager.idCounter = numId + 1;
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error(`❌ Error crítico creando elemento ${data?.id}:`, error);
+      return false;
+    }
+  }
+
+  handleRemoteChange(data) {
+    if (!data) {
+      return;
+    }
+    if (data.usuario?.id === this.usuarioInfo?.id) {
+      return;
+    }
+    try {
+      const tipoUsuario = data.usuario?.isInvited
+        ? "INVITADO/USERSALA"
+        : "ANFITRIÓN/PROPIETARIO";
+      this.updateSyncStatus("syncing");
+      document.body.style.borderLeft = "5px solid #4CAF50";
+      setTimeout(() => {
+        document.body.style.borderLeft = "none";
+      }, 300);
+      switch (data.action) {
+        case "fullState":
+          if (
+            typeof DiagramManager !== "undefined" &&
+            DiagramManager.loadDiagramFromXML
+          ) {
+            const loadSuccess = DiagramManager.loadDiagramFromXML(
+              JSON.stringify(data.data.state)
+            );
+            if (loadSuccess) {
+              this.showNotification(
+                `✅ ${data.usuario.name} actualizó toda la pizarra`,
+                "success",
+                2000
+              );
+            } else {
+              this.showNotification(
+                `⚠️ Error aplicando cambios de ${data.usuario.name}`,
+                "warning",
+                3000
+              );
+            }
+          } else {
+            this.loadDiagramState(data.data.state);
+            this.showNotification(
+              `📊 ${data.usuario.name} actualizó toda la pizarra (fallback)`,
+              "success",
+              2000
+            );
+          }
+          break;
+        case "elementAdded":
+          this.createElementFromData(data.data);
+          this.showNotification(
+            `➕ ${data.usuario.name} añadió ${data.data.type}`,
+            "info",
+            1500
+          );
+          break;
+        case "elementUpdated":
+          this.updateRemoteElement(data.data);
+          break;
+        case "elementMoved":
+          this.updateRemoteElementPosition(data.data);
+          break;
+        case "elementDeleted":
+          this.deleteRemoteElement(data.data.id);
+          this.showNotification(
+            `🗑️ ${data.usuario.name} eliminó un elemento`,
+            "warning",
+            1500
+          );
+          break;
+
+        case "connectionAdded":
+          this.addRemoteConnection(data.data);
+          break;
+
+        case "connectionDeleted":
+          this.deleteRemoteConnection(data.data.id);
+          break;
+
+        default:
+          console.warn(
+            "⚠️ Acción desconocida en handleRemoteChange:",
+            data.action
+          );
+          console.log("📊 Datos completos:", data);
+      }
+      setTimeout(() => {
+        this.updateSyncStatus("synced");
+      }, 100);
+      this.lastSyncTime = Date.now();
+    } catch (error) {
+      console.error("❌ Error procesando cambio remoto:", error);
+      this.updateSyncStatus("error");
+    }
+  }
+
+  updateRemoteElement(data) {
+    if (!window.DiagramManager) return;
+    const element = DiagramManager.elements.get(data.id);
+    if (element) {
+      this.isUpdatingRemotely = true;
+      Object.assign(element, data);
+      element.updateDisplay();
+      this.isUpdatingRemotely = false;
+      if (window.ConnectionManager) {
+        ConnectionManager.updateConnections();
+      }
+      this.highlightElementUpdate(data.id);
+    }
+  }
+
+  updateRemoteElementPosition(data) {
+    if (!window.DiagramManager) return;
+    const element = DiagramManager.elements.get(data.id);
+    if (element) {
+      this.isUpdatingRemotely = true;
+      element.x = data.x;
+      element.y = data.y;
+      element.updatePosition();
+      this.isUpdatingRemotely = false;
+      if (window.ConnectionManager) {
+        ConnectionManager.updateConnections();
+      }
+      this.showUserCursor(data.id, data.x, data.y);
+    }
+  }
+
+  highlightElementUpdate(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.style.transition = "box-shadow 0.3s ease";
+      element.style.boxShadow = "0 0 10px #3b82f6";
+      setTimeout(() => {
+        element.style.boxShadow = "";
+        element.style.transition = "";
+      }, 300);
+    }
+  }
+
+  showUserCursor(elementId, x, y) {
+    let cursor = document.getElementById(`cursor-${elementId}`);
+    if (!cursor) {
+      cursor = document.createElement("div");
+      cursor.id = `cursor-${elementId}`;
+      cursor.className = "user-cursor";
+      cursor.innerHTML = `
+                        <div class="cursor-dot" style="background: #3b82f6;"></div>
+                    `;
+      document.getElementById("canvas").appendChild(cursor);
+    }
+    cursor.style.left = x + "px";
+    cursor.style.top = y + "px";
+    clearTimeout(cursor.hideTimeout);
+    cursor.hideTimeout = setTimeout(() => {
+      if (cursor.parentNode) {
+        cursor.parentNode.removeChild(cursor);
+      }
+    }, 2000);
+  }
+
+  deleteRemoteElement(elementId) {
+    if (!window.DiagramManager) return;
+    const element = DiagramManager.elements.get(elementId);
+    if (element) {
+      DiagramManager.deleteElement(elementId);
+    }
+  }
+
+  addRemoteConnection(connectionData) {
+    if (!window.ConnectionManager) return;
+    ConnectionManager.connections.push(connectionData);
+    ConnectionManager.updateConnections();
+  }
+
+  deleteRemoteConnection(connectionId) {
+    if (!window.ConnectionManager) return;
+    ConnectionManager.connections = ConnectionManager.connections.filter(
+      (conn) => conn.id !== connectionId
+    );
+    ConnectionManager.updateConnections();
+  }
+
+  broadcastChange(action, data) {
+    if (
+      !this.socket ||
+      !this.isConnected ||
+      !this.salaId ||
+      this.isUpdatingRemotely
+    ) {
+      return;
+    }
+    const tipoUsuario = this.usuarioInfo.isInvited ? "INVITADO" : "COLABORADOR";
+    const changeData = {
+      salaId: this.salaId,
+      usuario: {
+        ...this.usuarioInfo,
+        timestamp: Date.now(),
+      },
+      action: action,
+      data: data,
+      timestamp: Date.now(),
+    };
+    this.socket.emit("actualizarDiagrama", changeData);
+    this.updateSyncStatus("syncing");
+    setTimeout(() => {
+      if (this.isConnected) {
+        this.updateSyncStatus("synced");
+      }
+    }, 50);
+  }
+
+  saveFullState() {
+    if (!window.DiagramManager || !window.ConnectionManager) return;
+    const state = {
+      elements: Array.from(DiagramManager.elements.values()).map((el) => ({
+        ...el,
+        selected: false,
+      })),
+      connections: ConnectionManager.connections || [],
+    };
+    this.broadcastChange("fullState", { state });
+    if (this.socket) {
+      this.socket.emit("guardarEstado", {
+        salaId: this.salaId,
+        estado: state,
+      });
+    }
+  }
+
+  crearElementoPrueba() {
+    if (!window.DiagramManager) return;
+
+    const elementoPrueba = {
+      id: "test-sync-" + Date.now(),
+      type: "rectangle",
+      x: Math.random() * 400 + 100,
+      y: Math.random() * 300 + 100,
+      width: 120,
+      height: 60,
+      text: `Prueba ${this.usuarioInfo?.name}`,
+      color: "#" + Math.floor(Math.random() * 16777215).toString(16),
+      selected: false,
+    };
+    DiagramManager.elements.set(elementoPrueba.id, elementoPrueba);
+    DiagramManager.drawElement(elementoPrueba);
+    this.broadcastChange("elementAdded", elementoPrueba);
+    return elementoPrueba.id;
+  }
+
+  updateSyncStatus(status) {
+    const indicator = document.getElementById("sync-indicator");
+    const text = document.getElementById("sync-text");
+    if (!indicator || !text) return;
+    indicator.className = "sync-indicator";
+    switch (status) {
+      case "connected":
+        indicator.classList.add("online");
+        text.textContent = "Conectado";
+        text.style.color = "#10b981";
+        break;
+      case "syncing":
+        indicator.classList.add("syncing");
+        text.textContent = "Sincronizando en tiempo real...";
+        text.style.color = "#f59e0b";
+        break;
+      case "synced":
+        text.textContent = "Todo sincronizado ✓";
+        text.style.color = "#10b981";
+        break;
+      case "error":
+        indicator.classList.add("error");
+        text.textContent = "Error de conexión";
+        text.style.color = "#ef4444";
+        break;
+      case "disconnected":
+        indicator.classList.add("error");
+        text.textContent = "Modo offline";
+        text.style.color = "#6b7280";
+        break;
+    }
+  }
+
+  updateUsersList() {
+    const userCount = document.getElementById("user-count");
+    const userAvatars = document.getElementById("user-avatars");
+    if (!userCount || !userAvatars) return;
+    const count = this.usuariosConectados.size + 1;
+    userCount.textContent = `${count} ${count !== 1 ? "s" : ""} online`;
+    userAvatars.innerHTML = "";
+    const selfAvatar = this.createAvatarElement(this.usuarioInfo, true);
+    userAvatars.appendChild(selfAvatar);
+    this.usuariosConectados.forEach((usuario) => {
+      const avatar = this.createAvatarElement(usuario, false);
+      userAvatars.appendChild(avatar);
+    });
+  }
+
+  createAvatarElement(usuario, isSelf) {
+    const avatar = document.createElement("div");
+    avatar.className = `user-avatar ${isSelf ? "online" : ""}`;
+    avatar.style.backgroundColor = usuario.avatar.color;
+    avatar.textContent = usuario.avatar.initials;
+    const tipoUsuario = isSelf
+      ? " (tú)"
+      : usuario.isInvited
+      ? " (invitado)"
+      : usuario.isAuthenticated
+      ? " (colaborador)"
+      : " (anónimo)";
+    avatar.title = `${usuario.name}${tipoUsuario}`;
+    if (usuario.isInvited && !isSelf) {
+      avatar.style.border = "2px solid #f59e0b";
+      avatar.style.position = "relative";
+    }
+    return avatar;
+  }
+
+  addUser(usuario) {
+    this.usuariosConectados.set(usuario.id, usuario);
+    this.updateUsersList();
+  }
+
+  removeUser(usuarioId) {
+    this.usuariosConectados.delete(usuarioId);
+    this.updateUsersList();
+  }
+
+  showNotification(message, type = "info", duration = 3000) {
+    const notification = document.createElement("div");
+    notification.className = `notification ${type}`;
+    const icons = {
+      info: "fas fa-info-circle",
+      success: "fas fa-check-circle",
+      warning: "fas fa-exclamation-triangle",
+      error: "fas fa-times-circle",
+    };
+    notification.innerHTML = `<i class="${icons[type]} me-2"></i>${message}`;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.classList.add("show"), 10);
+
+    setTimeout(() => {
+      notification.classList.remove("show");
+      setTimeout(() => notification.remove(), 300);
+    }, duration);
+  }
+
+  procesarCambioInstantaneo(data) {
+    try {
+      const { tipo, elemento, usuario, timestamp } = data;
+      if (!tipo || !elemento) {
+        console.warn(
+          "Datos insuficientes para procesarCambioInstantaneo:",
+          data
+        );
+        return;
+      }
+
+      // 🎯 NO PROCESAR CAMBIOS DEL MISMO USUARIO (evitar loops)
+      if (usuario && usuario.id === this.usuarioInfo?.id) {
+        console.log(
+          "🚫 Ignorando cambio instantáneo del mismo usuario:",
+          usuario.name
+        );
+        return;
+      }
+
+      if (usuario && usuario.id) {
+        this.mostrarIndicadorUsuario(usuario, tipo);
+      }
+      switch (tipo) {
+        case "elementoMovido":
+          this.actualizarPosicionElemento(elemento);
+          break;
+        case "elementoRedimensionado":
+          this.actualizarTamañoElemento(elemento);
+          break;
+        case "textoEditado":
+          this.actualizarTextoElemento(elemento);
+          break;
+        case "propiedadesModificadas":
+          this.actualizarPropiedadesElemento(elemento);
+          break;
+        default:
+          console.warn("Tipo de cambio no reconocido:", tipo);
+      }
+    } catch (error) {
+      console.error("❌ Error en procesarCambioInstantaneo:", error, data);
+    }
+  }
+
+  mostrarIndicadorUsuario(usuario, accion) {
+    if (!usuario || !usuario.id || !usuario.name) {
+      console.warn("Usuario inválido para mostrar indicador:", usuario);
+      return;
+    }
+    let indicador = document.querySelector(
+      `[data-user-indicator="${usuario.id}"]`
+    );
+    if (!indicador) {
+      indicador = document.createElement("div");
+      indicador.className = "user-activity-indicator";
+      indicador.setAttribute("data-user-indicator", usuario.id);
+      indicador.style.cssText = `
+                        position: fixed;
+                        top: 10px;
+                        right: 10px;
+                        background: ${usuario.avatar.color};
+                        color: white;
+                        padding: 5px 10px;
+                        border-radius: 15px;
+                        font-size: 12px;
+                        z-index: 1000;
+                        animation: fadeInOut 2s ease-in-out;
+                    `;
+      document.body.appendChild(indicador);
+    }
+    indicador.textContent = `${usuario.name} está ${accion}`;
+    indicador.style.display = "block";
+    setTimeout(() => {
+      if (indicador) {
+        indicador.style.display = "none";
+      }
+    }, 2000);
+  }
+
+  actualizarPosicionElemento(elemento) {
+    try {
+      if (!elemento || !elemento.id) {
+        console.warn("Elemento inválido para actualizar posición:", elemento);
+        return;
+      }
+
+      if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+        const elementoLocal = DiagramManager.elements.get(elemento.id);
+        if (
+          elementoLocal &&
+          elemento.x !== undefined &&
+          elemento.y !== undefined
+        ) {
+          elementoLocal.x = elemento.x;
+          elementoLocal.y = elemento.y;
+          DiagramManager.redrawAll();
+        }
+      }
+    } catch (error) {
+      console.error(
+        "❌ Error actualizando posición elemento:",
+        error,
+        elemento
+      );
+    }
+  }
+
+  actualizarTamañoElemento(elemento) {
+    try {
+      if (!elemento || !elemento.id) {
+        console.warn("Elemento inválido para actualizar tamaño:", elemento);
+        return;
+      }
+      if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+        const elementoLocal = DiagramManager.elements.get(elemento.id);
+        if (
+          elementoLocal &&
+          elemento.width !== undefined &&
+          elemento.height !== undefined
+        ) {
+          elementoLocal.width = elemento.width;
+          elementoLocal.height = elemento.height;
+          DiagramManager.redrawAll();
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error actualizando tamaño elemento:", error, elemento);
+    }
+  }
+
+  actualizarTextoElemento(elemento) {
+    try {
+      if (!elemento || !elemento.id) {
+        console.warn("Elemento inválido para actualizar texto:", elemento);
+        return;
+      }
+      if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+        const elementoLocal = DiagramManager.elements.get(elemento.id);
+        if (elementoLocal) {
+          if (elemento.name !== undefined) elementoLocal.name = elemento.name;
+          if (elemento.attributes !== undefined)
+            elementoLocal.attributes = elemento.attributes;
+          if (elemento.methods !== undefined)
+            elementoLocal.methods = elemento.methods;
+          DiagramManager.redrawAll();
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error actualizando texto elemento:", error, elemento);
+    }
+  }
+
+  actualizarPropiedadesElemento(elemento) {
+    if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+      const elementoLocal = DiagramManager.elements.get(elemento.id);
+      if (elementoLocal) {
+        Object.assign(elementoLocal, elemento);
+        DiagramManager.redrawAll();
+      }
+    }
+  }
+
+  procesarOperacionElemento(data) {
+    const { operacion, elemento, usuario } = data;
+    switch (operacion) {
+      case "crear":
+        this.crearElementoRemoto(elemento);
+        this.showNotification(
+          `${usuario.name} creó un nuevo elemento`,
+          "info",
+          2000
+        );
+        break;
+      case "eliminar":
+        this.eliminarElementoRemoto(elemento.id);
+        this.showNotification(
+          `${usuario.name} eliminó un elemento`,
+          "warning",
+          2000
+        );
+        break;
+      case "actualizar":
+        this.actualizarElementoCompleto(elemento);
+        this.showNotification(
+          `${usuario.name} actualizó un elemento`,
+          "info",
+          2000
+        );
+        break;
+      default:
+        console.warn("Operación no reconocida:", operacion);
+    }
+  }
+
+  crearElementoRemoto(elemento) {
+    if (typeof DiagramManager !== "undefined") {
+      if (!DiagramManager.elements.has(elemento.id)) {
+        DiagramManager.elements.set(elemento.id, elemento);
+        DiagramManager.redrawAll();
+      }
+    }
+  }
+
+  eliminarElementoRemoto(elementoId) {
+    if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+      DiagramManager.elements.delete(elementoId);
+      DiagramManager.redrawAll();
+    }
+  }
+
+  actualizarElementoCompleto(elemento) {
+    if (typeof DiagramManager !== "undefined" && DiagramManager.elements) {
+      DiagramManager.elements.set(elemento.id, elemento);
+      DiagramManager.redrawAll();
+    }
+  }
+}
+let pizarraColaborativa = null;
+
+window.debugPizarra = function () {
+  if (pizarraColaborativa) {
+    pizarraColaborativa.debugStatus();
+    const elementId = pizarraColaborativa.crearElementoPrueba();
+  } else {
+    console.log("❌ Pizarra colaborativa no iniciada");
+  }
+};
+
+window.probarSincronizacion = function () {
+  if (pizarraColaborativa) {
+    pizarraColaborativa.crearElementoPrueba();
+  }
+};
+if (typeof DiagramManager !== "undefined") {
+  const originalCreateElement = DiagramManager.createElement;
+  DiagramManager.createElement = function (type, x, y) {
+    const element = originalCreateElement.call(this, type, x, y);
+    if (element && pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.socket.emit("operacionElemento", {
+        operacion: "crear",
+        elemento: {
+          ...element,
+          selected: false,
+        },
+        salaId: pizarraColaborativa.salaId,
+        usuario: pizarraColaborativa.usuarioInfo,
+        timestamp: Date.now(),
+      });
+      pizarraColaborativa.broadcastChange("elementAdded", {
+        ...element,
+        selected: false,
+      });
+    }
+    return element;
+  };
+  const originalDeleteElement = DiagramManager.deleteElement;
+  DiagramManager.deleteElement = function (id) {
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.socket.emit("operacionElemento", {
+        operacion: "eliminar",
+        elemento: { id },
+        salaId: pizarraColaborativa.salaId,
+        usuario: pizarraColaborativa.usuarioInfo,
+        timestamp: Date.now(),
+      });
+      pizarraColaborativa.broadcastChange("elementDeleted", { id });
+    }
+    return originalDeleteElement.call(this, id);
+  };
+  const originalUpdateClass = DiagramManager.updateClass;
+  if (originalUpdateClass) {
+    DiagramManager.updateClass = function (id) {
+      const result = originalUpdateClass.call(this, id);
+      const element = this.elements.get(id);
+      if (window.BLOCK_ALL_SOCKET_IO) {
+        console.log(
+          "🚫 textoEditado cambioInstantaneo BLOQUEADO - modo seguro activo"
+        );
+        return;
+      }
+
+      if (element && pizarraColaborativa && pizarraColaborativa.isConnected) {
+        pizarraColaborativa.socket.emit("cambioInstantaneo", {
+          tipo: "textoEditado",
+          elemento: {
+            id: element.id,
+            name: element.name,
+            attributes: element.attributes,
+            methods: element.methods,
+            type: element.type,
+          },
+          salaId: pizarraColaborativa.salaId,
+          usuario: pizarraColaborativa.usuarioInfo,
+          timestamp: Date.now(),
+        });
+        pizarraColaborativa.broadcastChange("elementUpdated", {
+          ...element,
+          selected: false,
+        });
+      }
+      return result;
+    };
+  }
+  const originalUpdateEnum = DiagramManager.updateEnum;
+  if (originalUpdateEnum) {
+    DiagramManager.updateEnum = function (id) {
+      const result = originalUpdateEnum.call(this, id);
+      const element = this.elements.get(id);
+      if (element && pizarraColaborativa && pizarraColaborativa.isConnected) {
+        pizarraColaborativa.broadcastChange("elementUpdated", {
+          ...element,
+          selected: false,
+        });
+      }
+      return result;
+    };
+  }
+  const originalUpdatePackage = DiagramManager.updatePackage;
+  if (originalUpdatePackage) {
+    DiagramManager.updatePackage = function (id) {
+      const result = originalUpdatePackage.call(this, id);
+      const element = this.elements.get(id);
+      if (element && pizarraColaborativa && pizarraColaborativa.isConnected) {
+        pizarraColaborativa.broadcastChange("elementUpdated", {
+          ...element,
+          selected: false,
+        });
+      }
+      return result;
+    };
+  }
+  const originalUpdateNote = DiagramManager.updateNote;
+  if (originalUpdateNote) {
+    DiagramManager.updateNote = function (id) {
+      const result = originalUpdateNote.call(this, id);
+      const element = this.elements.get(id);
+      if (element && pizarraColaborativa && pizarraColaborativa.isConnected) {
+        pizarraColaborativa.broadcastChange("elementUpdated", {
+          ...element,
+          selected: false,
+        });
+      }
+      return result;
+    };
+  }
+}
+if (typeof UMLElement !== "undefined") {
+  const originalMove = UMLElement.prototype.move;
+  UMLElement.prototype.move = function (deltaX, deltaY) {
+    originalMove.call(this, deltaX, deltaY);
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      clearTimeout(this._moveTimeout);
+      clearTimeout(this._saveTimeout);
+      this._moveTimeout = setTimeout(() => {
+        pizarraColaborativa.broadcastChange("elementMoved", {
+          id: this.id,
+          x: this.x,
+          y: this.y,
+          type: "position",
+        });
+      }, 16);
+      this._saveTimeout = setTimeout(() => {
+        if (typeof immediateSync !== "undefined") immediateSync();
+      }, 500);
+    }
+  };
+}
+if (typeof UMLClass !== "undefined") {
+  const originalAddAttribute = UMLClass.prototype.addAttribute;
+  UMLClass.prototype.addAttribute = function (attribute) {
+    originalAddAttribute.call(this, attribute);
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.broadcastChange("elementUpdated", {
+        ...this,
+        selected: false,
+      });
+    }
+  };
+  const originalAddMethod = UMLClass.prototype.addMethod;
+  UMLClass.prototype.addMethod = function (method) {
+    originalAddMethod.call(this, method);
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.broadcastChange("elementUpdated", {
+        ...this,
+        selected: false,
+      });
+    }
+  };
+  const originalRemoveAttribute = UMLClass.prototype.removeAttribute;
+  UMLClass.prototype.removeAttribute = function (index) {
+    originalRemoveAttribute.call(this, index);
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.broadcastChange("elementUpdated", {
+        ...this,
+        selected: false,
+      });
+    }
+  };
+  const originalRemoveMethod = UMLClass.prototype.removeMethod;
+  UMLClass.prototype.removeMethod = function (index) {
+    originalRemoveMethod.call(this, index);
+    if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+      pizarraColaborativa.broadcastChange("elementUpdated", {
+        ...this,
+        selected: false,
+      });
+    }
+  };
+}
+let lastSaveTime = 0;
+
+function markUnsavedChanges() {
+  console.log("📝 Cambio marcado (sin auto-guardado por tiempo)");
+}
+
+function immediateSync() {
+  if (pizarraColaborativa && pizarraColaborativa.isConnected) {
+    pizarraColaborativa.saveFullState();
+  }
+}
+
+// ==================== AI CHATBOT CLASS ====================
+
+class AIChatbot {
+  constructor() {
+    this.currentMode = "text";
+    this.isMinimized = false;
+    this.isRecording = false;
+    this.mediaRecorder = null;
+    this.recordedChunks = [];
+    this.salaId = this.getSalaId();
+
+    this.init();
+  }
+
+  init() {
+    console.log("🤖 Inicializando AI Chatbot...");
+    this.setupEventListeners();
+    this.autoResize();
+  }
+
+  getSalaId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("id");
+  }
+
+  setupEventListeners() {
+    const textInput = document.getElementById("ai-text-input");
+    textInput.addEventListener("input", this.autoResize.bind(this));
+  }
+
+  static toggleMinimize() {
+    const chatbot = document.getElementById("ai-chatbot");
+    const icon = document.getElementById("minimize-icon");
+
+    if (chatbot.classList.contains("minimized")) {
+      chatbot.classList.remove("minimized");
+      icon.className = "fas fa-minus";
+    } else {
+      chatbot.classList.add("minimized");
+      icon.className = "fas fa-plus";
+    }
+  }
+
+  static closeChatbot() {
+    const chatbot = document.getElementById("ai-chatbot");
+    const toggleBtn = document.getElementById("ai-chatbot-toggle");
+
+    // Agregar clase de cerrado con animación
+    chatbot.classList.add("closed");
+
+    // Mostrar botón flotante después de la animación
+    setTimeout(() => {
+      toggleBtn.classList.add("show");
+    }, 400);
+  }
+
+  static openChatbot() {
+    const chatbot = document.getElementById("ai-chatbot");
+    const toggleBtn = document.getElementById("ai-chatbot-toggle");
+
+    // Ocultar botón flotante
+    toggleBtn.classList.remove("show");
+
+    // Quitar clase de cerrado
+    chatbot.classList.remove("closed");
+    chatbot.classList.remove("minimized");
+
+    // Actualizar icono de minimizar
+    const icon = document.getElementById("minimize-icon");
+    icon.className = "fas fa-minus";
+  }
+
+  static setMode(mode) {
+    const buttons = document.querySelectorAll(".ai-mode-btn");
+    const textInput = document.getElementById("ai-text-input");
+    const sendBtn = document.getElementById("ai-send-btn");
+    const sendIcon = document.getElementById("send-icon");
+
+    // Update active button
+    buttons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+
+    window.aiChatbot.currentMode = mode;
+
+    // Update UI based on mode
+    switch (mode) {
+      case "text":
+        textInput.placeholder = "Describe el diagrama que quieres crear...";
+        textInput.style.display = "block";
+        sendIcon.className = "fas fa-paper-plane";
+        sendBtn.classList.remove("ai-recording");
+        break;
+
+      case "voice":
+        textInput.placeholder = "Haz clic en el botón para grabar tu voz...";
+        textInput.style.display = "block";
+        sendIcon.className = "fas fa-microphone";
+        sendBtn.classList.remove("ai-recording");
+        break;
+
+      case "image":
+        textInput.placeholder = "Selecciona una imagen para analizar...";
+        textInput.style.display = "block";
+        sendIcon.className = "fas fa-image";
+        sendBtn.classList.remove("ai-recording");
+        break;
+    }
+  }
+
+  static handleKeyPress(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      AIChatbot.sendMessage();
+    }
+  }
+
+  static async sendMessage() {
+    const mode = window.aiChatbot.currentMode;
+
+    switch (mode) {
+      case "text":
+        await window.aiChatbot.sendTextMessage();
+        break;
+      case "voice":
+        await window.aiChatbot.toggleVoiceRecording();
+        break;
+      case "image":
+        window.aiChatbot.selectImage();
+        break;
+    }
+  }
+
+  async sendTextMessage() {
+    const textInput = document.getElementById("ai-text-input");
+    const message = textInput.value.trim();
+
+    if (!message) return;
+
+    // 🤖 ACTIVAR MODO SEGURO AI ANTES DE GENERAR DIAGRAMA
+    console.log("🤖 Iniciando generación AI - activando modo seguro");
+    window.BLOCK_ALL_SOCKET_IO = true;
+    this.isSelectingForAI = true;
+
+    // Add user message to chat
+    this.addMessage("user", message);
+    textInput.value = "";
+    this.autoResize();
+
+    // Show loading
+    this.showLoading();
+
+    try {
+      // Send to backend
+      const response = await fetch(
+        "http://localhost:8083/apis/ai/generate-diagram",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "text",
+            content: message,
+            salaId: this.salaId,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.addMessage("bot", result.message);
+
+        // Apply the generated diagram
+        if (result.diagram) {
+          this.applyDiagramToCanvas(result.diagram);
+        }
+      } else {
+        this.addMessage("bot", `❌ Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error enviando mensaje:", error);
+      this.addMessage(
+        "bot",
+        "❌ Error de conexión. Por favor intenta nuevamente."
+      );
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  async toggleVoiceRecording() {
+    if (!this.isRecording) {
+      await this.startRecording();
+    } else {
+      await this.stopRecording();
+    }
+  }
+
+  async startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      this.mediaRecorder = new MediaRecorder(stream);
+      this.recordedChunks = [];
+      this.isRecording = true;
+
+      const sendBtn = document.getElementById("ai-send-btn");
+      sendBtn.classList.add("ai-recording");
+
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.recordedChunks.push(event.data);
+        }
+      };
+
+      this.mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(this.recordedChunks, {
+          type: "audio/wav",
+        });
+        await this.sendAudioMessage(audioBlob);
+
+        // Clean up
+        stream.getTracks().forEach((track) => track.stop());
+        sendBtn.classList.remove("ai-recording");
+        this.isRecording = false;
+      };
+
+      this.mediaRecorder.start();
+      this.addMessage("bot", "🎙️ Grabando... Haz clic de nuevo para enviar.");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      this.addMessage(
+        "bot",
+        "❌ No se pudo acceder al micrófono. Verifica los permisos."
+      );
+    }
+  }
+
+  async stopRecording() {
+    if (this.mediaRecorder && this.isRecording) {
+      this.mediaRecorder.stop();
+    }
+  }
+
+  async sendAudioMessage(audioBlob) {
+    this.addMessage("user", "🎵 Mensaje de voz enviado");
+    this.showLoading();
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.wav");
+      formData.append("salaId", this.salaId);
+
+      const response = await fetch(
+        "http://localhost:8083/apis/ai/generate-diagram",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.addMessage("bot", result.message);
+
+        if (result.diagram) {
+          this.applyDiagramToCanvas(result.diagram);
+        }
+      } else {
+        this.addMessage("bot", `❌ Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error enviando audio:", error);
+      this.addMessage(
+        "bot",
+        "❌ Error procesando el audio. Por favor intenta nuevamente."
+      );
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  selectImage() {
+    const fileInput = document.getElementById("ai-file-input");
+    fileInput.click();
+  }
+
+  static handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (file) {
+      window.aiChatbot.sendImageMessage(file);
+    }
+  }
+
+  async sendImageMessage(imageFile) {
+    this.addMessage("user", `🖼️ Imagen enviada: ${imageFile.name}`);
+    this.showLoading();
+
+    try {
+      const formData = new FormData();
+      formData.append("image", imageFile);
+      formData.append("salaId", this.salaId);
+      const response = await fetch(
+        "http://localhost:8083/apis/ai/generate-diagram",
+        {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        }
+      );
+      const result = await response.json();
+      if (result.success) {
+        this.addMessage("bot", result.message);
+        if (result.diagram) {
+          this.applyDiagramToCanvas(result.diagram);
+        }
+      } else {
+        this.addMessage("bot", `❌ Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error enviando imagen:", error);
+      this.addMessage(
+        "bot",
+        "❌ Error procesando la imagen. Por favor intenta nuevamente."
+      );
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  addMessage(sender, content) {
+    const messagesContainer = document.getElementById("ai-chat-messages");
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `ai-message ${sender}`;
+    const bubbleDiv = document.createElement("div");
+    bubbleDiv.className = "ai-message-bubble";
+    bubbleDiv.textContent = content;
+    messageDiv.appendChild(bubbleDiv);
+    messagesContainer.appendChild(messageDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  showLoading() {
+    const messagesContainer = document.getElementById("ai-chat-messages");
+    const loadingDiv = document.createElement("div");
+    loadingDiv.className = "ai-loading";
+    loadingDiv.id = "ai-loading";
+    loadingDiv.innerHTML = `
+                    <span>AI generando diagrama</span>
+                    <div class="ai-loading-dots">
+                        <div class="ai-loading-dot"></div>
+                        <div class="ai-loading-dot"></div>
+                        <div class="ai-loading-dot"></div>
+                    </div>
+                `;
+
+    messagesContainer.appendChild(loadingDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  hideLoading() {
+    const loading = document.getElementById("ai-loading");
+    if (loading) {
+      loading.remove();
+    }
+  }
+
+  autoResize() {
+    const textInput = document.getElementById("ai-text-input");
+    textInput.style.height = "auto";
+    textInput.style.height = Math.min(textInput.scrollHeight, 100) + "px";
+  }
+
+  applyDiagramToCanvas(diagramData) {
+    console.log("🎨 Aplicando diagrama generado por AI:", diagramData);
+
+    try {
+      // Clear existing content
+      if (typeof DiagramManager !== "undefined" && DiagramManager.clearAll) {
+        DiagramManager.clearAll();
+      }
+
+      // Create elements using the native creation functions that preserve event listeners
+      if (diagramData && diagramData.elements) {
+        diagramData.elements.forEach((element, index) => {
+          if (element.type === "class") {
+            this.createInteractiveClass(element, index * 20); // Offset slightly to avoid overlapping
+          }
+        });
+
+        // Create relationships after all elements are created
+        if (diagramData.relationships) {
+          setTimeout(() => {
+            diagramData.relationships.forEach((rel) => {
+              this.createRelationship(rel);
+            });
+          }, 300);
+        }
+
+        this.addMessage(
+          "bot",
+          "✅ ¡Diagrama creado exitosamente con funcionalidad completa!"
+        );
+
+        // Trigger sync for collaborative editing
+        setTimeout(() => {
+          if (typeof immediateSync !== "undefined") {
+            immediateSync();
+          }
+
+          // 🔓 DESACTIVAR MODO SEGURO AI DESPUÉS DE COMPLETAR DIAGRAMA
+          setTimeout(() => {
+            window.BLOCK_ALL_SOCKET_IO = false;
+            this.isSelectingForAI = false;
+            console.log(
+              "🔓 Modo seguro AI desactivado - diagramas listos para edición normal"
+            );
+          }, 200);
+        }, 800);
+      } else {
+        throw new Error("Datos de diagrama inválidos");
+      }
+    } catch (error) {
+      console.error("Error aplicando diagrama:", error);
+      this.addMessage(
+        "bot",
+        "❌ Error aplicando el diagrama: " + error.message
+      );
+
+      // 🔓 DESACTIVAR MODO SEGURO INCLUSO SI HAY ERROR
+      setTimeout(() => {
+        window.BLOCK_ALL_SOCKET_IO = false;
+        this.isSelectingForAI = false;
+        console.log("🔓 Modo seguro AI desactivado después de error");
+      }, 500);
+    }
+  }
+
+  createInteractiveClass(classData, offset = 0) {
+    console.log("🏗️ Creando clase interactiva:", classData.name);
+
+    try {
+      // Use the native UMLClass constructor that preserves all functionality
+      const position = {
+        x: (classData.position?.x || 100) + offset,
+        y: (classData.position?.y || 100) + offset,
+      };
+
+      // Generate unique ID
+      const classId =
+        "ai_class_" +
+        Date.now() +
+        "_" +
+        Math.random().toString(36).substr(2, 9);
+
+      // Create using native UMLClass constructor
+      if (typeof UMLClass !== "undefined") {
+        const classElement = new UMLClass(
+          classId,
+          position.x,
+          position.y,
+          classData.name
+        );
+
+        // Add to elements array if it exists
+        if (typeof elements !== "undefined" && Array.isArray(elements)) {
+          elements.push(classElement);
+        }
+
+        // Add attributes after class is created
+        if (classData.attributes && classData.attributes.length > 0) {
+          setTimeout(() => {
+            classData.attributes.forEach((attr) => {
+              this.addAttributeToClass(classElement, attr);
+            });
+          }, 100);
+        }
+
+        // Add methods after class is created
+        if (classData.methods && classData.methods.length > 0) {
+          setTimeout(() => {
+            classData.methods.forEach((method) => {
+              this.addMethodToClass(classElement, method);
+            });
+          }, 200);
+        }
+
+        console.log("✅ Clase UML creada exitosamente:", classData.name);
+        return classElement;
+      } else {
+        throw new Error("UMLClass no está definida");
+      }
+    } catch (error) {
+      console.error("❌ Error creando clase con UMLClass:", error);
+      // Fallback: create using direct DOM manipulation
+      return this.createClassDirectly(classData, offset);
+    }
+  }
+
+  addAttributeToClass(classElement, attribute) {
+    try {
+      if (classElement && typeof classElement.addAttribute === "function") {
+        // Use the native UMLClass addAttribute method
+        const attr = {
+          name: attribute.name,
+          type: attribute.type,
+          visibility: attribute.visibility || "public",
+          isPrimaryKey: attribute.isPrimaryKey || false,
+        };
+        classElement.addAttribute(attr);
+        console.log("✅ Atributo agregado:", attribute.name);
+      } else {
+        console.warn(
+          "⚠️ No se pudo agregar atributo (método no disponible):",
+          attribute.name
+        );
+      }
+    } catch (error) {
+      console.error("❌ Error agregando atributo:", error);
+    }
+  }
+
+  addMethodToClass(classElement, method) {
+    try {
+      if (classElement && typeof classElement.addMethod === "function") {
+        // Use the native UMLClass addMethod method
+        const methodObj = {
+          name: method.name,
+          returnType: method.returnType || "void",
+          parameters: method.parameters || [],
+          visibility: method.visibility || "public",
+        };
+        classElement.addMethod(methodObj);
+        console.log("✅ Método agregado:", method.name);
+      } else {
+        console.warn(
+          "⚠️ No se pudo agregar método (método no disponible):",
+          method.name
+        );
+      }
+    } catch (error) {
+      console.error("❌ Error agregando método:", error);
+    }
+  }
+
+  createClassDirectly(classData, offset = 0) {
+    console.log("🔨 Creando clase directamente:", classData.name);
+
+    // This is a fallback that creates a basic interactive class
+    const canvas =
+      document.getElementById("canvas") ||
+      document.querySelector(".canvas, #diagram-canvas, svg");
+    if (!canvas) {
+      console.error("❌ No se encontró canvas para crear clase");
+      return null;
+    }
+
+    const position = {
+      x: (classData.position?.x || 100) + offset,
+      y: (classData.position?.y || 100) + offset,
+    };
+
+    // Create class element with proper structure and event listeners
+    const classId =
+      "class_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+
+    const classElement = document.createElement("div");
+    classElement.id = classId;
+    classElement.className = "uml-class class-element";
+    classElement.style.position = "absolute";
+    classElement.style.left = position.x + "px";
+    classElement.style.top = position.y + "px";
+    classElement.style.border = "2px solid #333";
+    classElement.style.backgroundColor = "white";
+    classElement.style.minWidth = "150px";
+    classElement.style.cursor = "pointer";
+
+    // Add class structure
+    classElement.innerHTML = `
+                    <div class="class-header" style="background: #f0f0f0; padding: 8px; font-weight: bold; text-align: center;">
+                        ${classData.name}
+                    </div>
+                    <div class="class-attributes" style="border-top: 1px solid #ccc; padding: 4px;">
+                        ${
+                          classData.attributes
+                            ?.map(
+                              (attr) =>
+                                `<div class="attribute" style="padding: 2px; cursor: pointer;">
+                                ${
+                                  attr.visibility === "private"
+                                    ? "-"
+                                    : attr.visibility === "protected"
+                                    ? "#"
+                                    : "+"
+                                } 
+                                ${attr.name}: ${attr.type}
+                            </div>`
+                            )
+                            .join("") ||
+                          '<div style="padding: 2px; color: #999;">Sin atributos</div>'
+                        }
+                    </div>
+                    <div class="class-methods" style="border-top: 1px solid #ccc; padding: 4px;">
+                        ${
+                          classData.methods
+                            ?.map(
+                              (method) =>
+                                `<div class="method" style="padding: 2px; cursor: pointer;">
+                                ${
+                                  method.visibility === "private"
+                                    ? "-"
+                                    : method.visibility === "protected"
+                                    ? "#"
+                                    : "+"
+                                } 
+                                ${method.name}(${
+                                  method.parameters
+                                    ?.map((p) => `${p.name}: ${p.type}`)
+                                    .join(", ") || ""
+                                }): ${method.returnType}
+                            </div>`
+                            )
+                            .join("") ||
+                          '<div style="padding: 2px; color: #999;">Sin métodos</div>'
+                        }
+                    </div>
+                `;
+
+    // Add click event listener for selection using unified method
+    classElement.addEventListener(
+      "click",
+      (e) => {
+        e.stopPropagation();
+        e.stopImmediatePropagation(); // Prevent other event listeners
+        e.preventDefault();
+        console.log("🖱️ Clase clickeada:", classData.name);
+
+        // Use the unified selection method from AIChatbot class
+        if (
+          window.aiChatbot &&
+          typeof window.aiChatbot.selectClassForEditing === "function"
+        ) {
+          window.aiChatbot.selectClassForEditing(classElement);
+        } else {
+          // Fallback: Direct PropertiesManager call
+          // Remove previous selection
+          document.querySelectorAll(".selected-element").forEach((el) => {
+            el.classList.remove("selected-element");
+          });
+
+          // Select this element
+          classElement.classList.add("selected-element");
+
+          // Show properties using PropertiesManager
+          if (
+            typeof PropertiesManager !== "undefined" &&
+            PropertiesManager.showProperties
+          ) {
+            PropertiesManager.showProperties(classElement);
+            console.log(
+              "✅ Panel de propiedades mostrado para:",
+              classData.name
+            );
+          }
+        }
+      },
+      true
+    ); // Use capture phase for higher priority
+
+    canvas.appendChild(classElement);
+    console.log("✅ Clase creada exitosamente:", classData.name);
+    return classElement;
+  }
+
+  createRelationship(relationshipData) {
+    // Implement relationship creation if needed
+    console.log("🔗 Creando relación:", relationshipData.type);
+    // This would need to be implemented based on your relationship system
+  }
+
+  restoreInteractionFunctionality() {
+    console.log("🔧 Restaurando funcionalidad de interacción...");
+
+    // Wait a bit for elements to be fully rendered
+    setTimeout(() => {
+      // Look for various possible class selectors
+      const classSelectors = [
+        ".class-element",
+        '[data-type="class"]',
+        ".uml-class",
+        ".class",
+        'g[data-type="class"]',
+        "g.class-element",
+      ];
+
+      let classes = [];
+      classSelectors.forEach((selector) => {
+        const found = document.querySelectorAll(selector);
+        found.forEach((el) => {
+          if (!classes.includes(el)) {
+            classes.push(el);
+          }
+        });
+      });
+
+      console.log(`🔍 Encontrados ${classes.length} elementos de clase`);
+
+      classes.forEach((classElement, index) => {
+        console.log(`📋 Configurando elemento ${index + 1}:`, classElement);
+
+        // Remove any existing event listeners to avoid duplicates
+        const newClassElement = classElement.cloneNode(true);
+        classElement.parentNode.replaceChild(newClassElement, classElement);
+
+        // Add click event listener for class selection
+        newClassElement.addEventListener(
+          "click",
+          (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            console.log("🖱️ Click en clase detectado:", newClassElement);
+            this.selectClassForEditing(newClassElement);
+          },
+          true
+        ); // Use capture phase for higher priority
+
+        // Ensure the element is properly styled for interaction
+        newClassElement.style.cursor = "pointer";
+
+        // Add visual feedback
+        newClassElement.addEventListener("mouseenter", () => {
+          newClassElement.style.opacity = "0.8";
+        });
+
+        newClassElement.addEventListener("mouseleave", () => {
+          newClassElement.style.opacity = "1";
+        });
+      });
+
+      // Re-enable attribute and method editing
+      const attributes = document.querySelectorAll(
+        ".attribute, .method, .class-attribute, .class-method"
+      );
+      attributes.forEach((element) => {
+        element.style.cursor = "pointer";
+      });
+      this.setupPropertyPanelEvents();
+    }, 300);
+  }
+
+  selectClassForEditing(classElement) {
+    console.log("🎯 SELECCIÓN PURA - SIN SOCKET.IO");
+    console.log("🔍 DEBUG - Elemento recibido:", {
+      id: classElement.id,
+      type: classElement.type,
+      classList: classElement.classList
+        ? Array.from(classElement.classList)
+        : "no classList",
+      attributes: classElement.getAttributeNames
+        ? classElement.getAttributeNames()
+        : "no getAttributeNames",
+      innerHTML: classElement.innerHTML
+        ? classElement.innerHTML.substring(0, 100) + "..."
+        : "no innerHTML",
+    });
+
+    // 🚫 BLOQUEO TOTAL DE SOCKET.IO DURANTE SELECCIÓN
+    window.BLOCK_ALL_SOCKET_IO = true;
+    console.log("🚫 TODOS LOS EVENTOS SOCKET.IO BLOQUEADOS");
+
+    // 🎯 USAR SISTEMA DE SELECCIÓN PERSISTENTE
+    if (window.persistentSelection) {
+      window.persistentSelection.setSelected(classElement);
+    } else {
+      // Fallback si el sistema persistente no está listo
+      classElement.classList.add("selected-element");
+      classElement.setAttribute("data-selecting", "true");
+      console.log("🔄 Usando selección fallback");
+    }
+
+    setTimeout(() => {
+      classElement.classList.add("selected-element");
+      this.showElementPropertiesViewOnly(classElement);
+      setTimeout(() => {
+        const propertiesPanel = document.querySelector("#properties-panel");
+        if (propertiesPanel) {
+          propertiesPanel.style.display = "block";
+          console.log("🔒 Panel de propiedades fijado como visible");
+        }
+      }, 100);
+      classElement.removeAttribute("data-selecting");
+      setTimeout(() => {
+        window.BLOCK_ALL_SOCKET_IO = false;
+        console.log("🔓 SOCKET.IO DESBLOQUEADO - listo para cambios reales");
+      }, 200);
+    }, 50);
+  }
+
+  showElementPropertiesViewOnly(domElement) {
+    let realElement = null;
+    if (DiagramManager && DiagramManager.elements) {
+      realElement = DiagramManager.elements.get(domElement.id);
+    }
+    if (!realElement && DiagramManager && DiagramManager.getClass) {
+      realElement = DiagramManager.getClass(domElement.id);
+    }
+    if (!realElement) {
+      realElement = this.extractElementDataFromDOM(domElement);
+    }
+    this.renderPropertiesViewOnly(realElement, domElement.id);
+  }
+
+  extractElementDataFromDOM(domElement) {
+    const nameElement = domElement.querySelector(".class-name");
+    const attributeElements = domElement.querySelectorAll(
+      ".attribute, .class-attribute"
+    );
+    const methodElements = domElement.querySelectorAll(
+      ".method, .class-method"
+    );
+    return {
+      id: domElement.id,
+      type: "class",
+      name: nameElement ? nameElement.textContent.trim() : "Sin nombre",
+      attributes: Array.from(attributeElements).map((attr) => ({
+        name: attr.textContent.trim(),
+        type: "string",
+        visibility: "public",
+      })),
+      methods: Array.from(methodElements).map((method) => ({
+        name: method.textContent.trim(),
+        returnType: "void",
+        visibility: "public",
+      })),
+      x: parseInt(domElement.style.left) || 0,
+      y: parseInt(domElement.style.top) || 0,
+      visibility: "public",
+      stereotype: "",
+    };
+  }
+
+  renderPropertiesViewOnly(element, elementId) {
+    const content = document.getElementById("properties-content");
+    if (!content) {
+      console.error("❌ No se encontró properties-content");
+      return;
+    }
+    content.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-eye me-2"></i><strong>Modo Visualización</strong><br>
+                        <small>Los cambios se aplicarán cuando edites valores y se sincronizarán automáticamente.</small>
+                    </div>
+                    <div class="property-group">
+                        <label><strong>Nombre de la Clase</strong></label>
+                        <input type="text" class="form-control" value="${
+                          element.name || "Sin nombre"
+                        }" readonly 
+                               style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="property-group">
+                        <label><strong>Tipo</strong></label>
+                        <input type="text" class="form-control" value="${
+                          element.type || "class"
+                        }" readonly 
+                               style="background-color: #f8f9fa;">
+                    </div>
+                    <div class="property-group">
+                        <label><strong>Atributos (${
+                          element.attributes ? element.attributes.length : 0
+                        })</strong></label>
+                        <div class="list-group list-group-flush">
+                            ${
+                              element.attributes &&
+                              element.attributes.length > 0
+                                ? element.attributes
+                                    .map(
+                                      (attr) => `
+                                    <div class="list-group-item small">
+                                        <code>${attr.visibility || "public"} ${
+                                        attr.name || "atributo"
+                                      }: ${attr.type || "string"}</code>
+                                    </div>
+                                `
+                                    )
+                                    .join("")
+                                : '<div class="text-muted small">Sin atributos definidos</div>'
+                            }
+                        </div>
+                    </div>
+                    <div class="property-group">
+                        <label><strong>Métodos (${
+                          element.methods ? element.methods.length : 0
+                        })</strong></label>
+                        <div class="list-group list-group-flush">
+                            ${
+                              element.methods && element.methods.length > 0
+                                ? element.methods
+                                    .map(
+                                      (method) => `
+                                    <div class="list-group-item small">
+                                        <code>${
+                                          method.visibility || "public"
+                                        } ${method.name || "metodo"}(): ${
+                                        method.returnType || "void"
+                                      }</code>
+                                    </div>
+                                `
+                                    )
+                                    .join("")
+                                : '<div class="text-muted small">Sin métodos definidos</div>'
+                            }
+                        </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <button class="btn btn-outline-primary btn-sm" onclick="alert('Funcionalidad de edición completa próximamente')">
+                            <i class="fas fa-edit me-1"></i> Editar Propiedades
+                        </button>
+                    </div>
+                `;
+
+    // Asegurar que el panel sea visible
+    const propertiesPanel = document.getElementById("properties-panel");
+    if (propertiesPanel) {
+      propertiesPanel.style.display = "block";
+    }
+
+    console.log("✅ Propiedades renderizadas en modo SOLO VISUALIZACIÓN");
+  }
+
+  // Method for actual editing (DOES send Socket.IO events)
+  editClassProperties(classElement, property, newValue) {
+    console.log("✏️ Editando propiedad real:", property, "=", newValue);
+
+    // Get the actual element object
+    const element =
+      DiagramManager.elements.get(classElement.id) ||
+      DiagramManager.getClass(classElement.id);
+
+    if (element && element[property] !== newValue) {
+      // Make the actual change
+      element[property] = newValue;
+
+      // Update the visual display
+      if (element.updateDisplay) {
+        element.updateDisplay();
+      }
+
+      // Now mark as changed (this WILL send Socket.IO events)
+      PersistenceManager.markAsChanged();
+
+      console.log(
+        "📤 Cambio real enviado por Socket.IO:",
+        property,
+        "=",
+        newValue
+      );
+    }
+  }
+
+  setupPropertyPanelEvents() {
+    // Ensure property panel is visible and functional
+    const propertyPanel =
+      document.getElementById("property-panel") ||
+      document.querySelector(".property-panel") ||
+      document.querySelector("#properties-panel") ||
+      document.querySelector("#elementProperties");
+
+    if (propertyPanel) {
+      propertyPanel.style.display = "block";
+      console.log("✅ Panel de propiedades habilitado:", propertyPanel);
+    } else {
+      console.warn("⚠️ No se encontró panel de propiedades");
+      // Debug: list all possible panels
+      const allPanels = document.querySelectorAll(
+        '[id*="panel"], [id*="properties"], [class*="panel"], [class*="properties"]'
+      );
+      console.log("📋 Paneles encontrados:", allPanels);
+    }
+  }
+
+  // Debug function to check elements after diagram generation
+  debugElements() {
+    console.log("🔍 DEBUG: Elementos en el DOM después de generar diagrama");
+
+    const allElements = document.querySelectorAll(
+      '*[class*="class"], *[data-type], svg g, .uml-element'
+    );
+    console.log("📊 Total elementos encontrados:", allElements.length);
+
+    allElements.forEach((el, index) => {
+      console.log(
+        `${index + 1}.`,
+        el.tagName,
+        el.className,
+        el.getAttribute("data-type"),
+        el
+      );
+    });
+
+    return allElements;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  setTimeout(() => {
+    if (typeof SalaManager !== "undefined") {
+      SalaManager.init();
+    }
+    pizarraColaborativa = new PizarraColaborativa();
+    window.pizarraColaborativa = pizarraColaborativa;
+
+    // Initialize AI Chatbot
+    window.aiChatbot = new AIChatbot();
+
+    // 🛡️ PROTECCIÓN GLOBAL: Watcher para el panel de propiedades
+    setTimeout(() => {
+      const propertiesPanel = document.getElementById("properties-panel");
+      if (propertiesPanel) {
+        const observer = new MutationObserver((mutations) => {
+          const aiSelectedElement = document.querySelector(".selected-element");
+          if (aiSelectedElement && propertiesPanel.style.display === "none") {
+            console.log(
+              "🚨 Panel oculto detectado - restaurando para elemento AI"
+            );
+            propertiesPanel.style.display = "block";
+          }
+        });
+
+        observer.observe(propertiesPanel, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+
+        console.log("🛡️ Watcher del panel de propiedades activado");
+      }
+
+      // 🚫 INTERCEPTAR TODOS LOS SOCKET.IO EMITS
+      if (window.pizarraColaborativa && window.pizarraColaborativa.socket) {
+        const originalEmit = window.pizarraColaborativa.socket.emit;
+
+        window.pizarraColaborativa.socket.emit = function (...args) {
+          if (window.BLOCK_ALL_SOCKET_IO) {
+            console.log("🚫 Socket.emit BLOQUEADO:", args[0]);
+            return;
+          }
+          console.log("📤 Socket.emit PERMITIDO:", args[0]);
+          return originalEmit.apply(this, args);
+        };
+
+        console.log("🛡️ Interceptor Socket.IO activado");
+      } // 🎯 SISTEMA DE SELECCIÓN PERSISTENTE
+      window.persistentSelection = {
+        currentElement: null,
+
+        setSelected: function (element) {
+          console.log("🎯 Estableciendo selección persistente:", element);
+
+          // Limpiar selección previa
+          this.clearSelection();
+
+          // Marcar nuevo elemento
+          this.currentElement = element;
+          element.classList.add("selected-element");
+          element.setAttribute("data-persistent-selected", "true");
+
+          console.log("✅ Selección persistente establecida");
+        },
+
+        clearSelection: function () {
+          if (this.currentElement) {
+            console.log("🧹 Limpiando selección persistente");
+            this.currentElement.classList.remove("selected-element");
+            this.currentElement.removeAttribute("data-persistent-selected");
+            this.currentElement = null;
+          }
+        },
+
+        hasSelection: function () {
+          return !!this.currentElement;
+        },
+      };
+
+      console.log("🎯 Sistema de selección persistente inicializado");
+    }, 1000);
+  }, 500);
+});

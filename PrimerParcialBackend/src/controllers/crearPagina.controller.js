@@ -1,12 +1,12 @@
-import path from 'path';
-import { exec } from 'child_process';
-import fs from 'fs';
-import archiver from 'archiver';
-import { response } from '../middlewares/catchedAsync.js';
-import { getSalaById, updateSala } from '../models/sala.model.js';
-import { rm } from 'fs/promises';
+import path from "path";
+import { exec } from "child_process";
+import fs from "fs";
+import archiver from "archiver";
+import { response } from "../middlewares/catchedAsync.js";
+import { getSalaById, updateSala } from "../models/sala.model.js";
+import { rm } from "fs/promises";
 
-const rutaBase = 'C:/Users/Public/Documents/proyectos';
+const rutaBase = "C:/Users/Public/Documents/proyectos";
 
 class CrearPaginaController {
   exportar = async (req, res) => {
@@ -14,7 +14,7 @@ class CrearPaginaController {
     try {
       const [sala] = await getSalaById(id);
       if (!sala) {
-        return response(res, 404, { error: 'Sala no encontrada' });
+        return response(res, 404, { error: "Sala no encontrada" });
       }
       const titulo = sala.title;
       const salaData = JSON.parse(sala.xml);
@@ -24,8 +24,11 @@ class CrearPaginaController {
       await this.comprimirProyecto(titulo);
       await this.enviarZip(res, titulo);
     } catch (error) {
-      console.error('❌ Error general:', error.message);
-      return response(res, 500, { error: 'Error inesperado del servidor', detalles: error.message });
+      console.error("❌ Error general:", error.message);
+      return response(res, 500, {
+        error: "Error inesperado del servidor",
+        detalles: error.message,
+      });
     }
   };
 
@@ -36,9 +39,9 @@ class CrearPaginaController {
     const zipPath = path.join(rutaBase, `${titulo}.zip`);
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      output.on('close', () => resolve());
-      archive.on('error', (err) => reject(err));
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      output.on("close", () => resolve());
+      archive.on("error", (err) => reject(err));
       archive.pipe(output);
       archive.directory(rutaFinal, false);
       archive.finalize();
@@ -50,13 +53,16 @@ class CrearPaginaController {
     const zipPath = path.join(rutaBase, `${titulo}.zip`);
     try {
       const zipBuffer = fs.readFileSync(zipPath);
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename=${titulo}.zip`);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${titulo}.zip`
+      );
       res.send(zipBuffer);
       await rm(rutaFinal, { recursive: true, force: true });
       await rm(zipPath, { force: true });
     } catch (error) {
-      console.error('❌ Error al enviar o limpiar:', error.message);
+      console.error("❌ Error al enviar o limpiar:", error.message);
       throw error;
     }
   };
@@ -66,47 +72,66 @@ class CrearPaginaController {
     try {
       const [sala] = await getSalaById(id);
       if (!sala) {
-        return response(res, 404, { error: 'Sala no encontrada' });
+        return response(res, 404, { error: "Sala no encontrada" });
       }
-      if (!sala.xml || sala.xml.trim() === '') {
-        return response(res, 400, { error: 'La sala no tiene contenido XML para exportar' });
+      if (!sala.xml || sala.xml.trim() === "") {
+        return response(res, 400, {
+          error: "La sala no tiene contenido XML para exportar",
+        });
       }
       let salaData;
       try {
         salaData = JSON.parse(sala.xml);
       } catch (parseError) {
         console.error(`❌ Error parseando XML de sala:`, parseError);
-        return response(res, 400, { error: 'El XML de la sala no es válido' });
+        return response(res, 400, { error: "El XML de la sala no es válido" });
       }
       let elements = [];
       if (salaData.elements) {
         if (Array.isArray(salaData.elements)) {
           elements = salaData.elements;
-        } else if (typeof salaData.elements === 'object') {
+        } else if (typeof salaData.elements === "object") {
           elements = Object.values(salaData.elements);
         }
       }
       if (elements.length === 0) {
-        return response(res, 400, { error: 'No hay elementos UML en la sala para generar Spring Boot' });
+        return response(res, 400, {
+          error: "No hay elementos UML en la sala para generar Spring Boot",
+        });
       }
-      const classElements = elements.filter(el => el.type === 'class');
+      const classElements = elements.filter((el) => el.type === "class");
       if (classElements.length === 0) {
-        return response(res, 400, { error: 'No hay clases UML en la sala para generar entidades Spring Boot' });
+        return response(res, 400, {
+          error:
+            "No hay clases UML en la sala para generar entidades Spring Boot",
+        });
       }
       classElements.forEach((el, i) => {
-        console.log(`    ${i + 1}. ${el.name} (${el.type}) - Atributos: ${el.attributes ? el.attributes.length : 0}`);
+        console.log(
+          `    ${i + 1}. ${el.name} (${el.type}) - Atributos: ${
+            el.attributes ? el.attributes.length : 0
+          }`
+        );
       });
-      const processedData = this.procesarElementosConRelaciones(classElements, []);
-      const projectName = `spring-boot-${sala.title.toLowerCase().replace(/\s+/g, '-')}`;
+      const processedData = this.procesarElementosConRelaciones(
+        classElements,
+        []
+      );
+      const projectName = `spring-boot-${sala.title
+        .toLowerCase()
+        .replace(/\s+/g, "-")}`;
       await this.crearProyectoSpringBootCompleto(projectName, processedData);
       await new Promise((resolve) => setTimeout(resolve, 3000));
       await this.comprimirProyecto(projectName);
       await this.enviarZip(res, projectName);
     } catch (error) {
-      console.error('❌ Error exportando Spring Boot desde sala:', error.message);
+      console.error(
+        "❌ Error exportando Spring Boot desde sala:",
+        error.message
+      );
       return response(res, 500, {
-        error: 'Error exportando Spring Boot desde sala',
-        detalles: error.message
+        error: "Error exportando Spring Boot desde sala",
+        detalles: error.message,
       });
     }
   };
@@ -114,34 +139,49 @@ class CrearPaginaController {
   exportarSpringBootConRelaciones = async (req, res) => {
     const { elements, connections } = req.body;
     if (!elements || elements.length === 0) {
-      return response(res, 400, { error: 'No hay elementos para generar el proyecto Spring Boot' });
+      return response(res, 400, {
+        error: "No hay elementos para generar el proyecto Spring Boot",
+      });
     }
     elements.forEach((el, i) => {
-      if (el.type === 'class') {
-        console.log(`    ${i + 1}. ${el.name} - Atributos: ${el.attributes ? el.attributes.length : 0}`);
+      if (el.type === "class") {
+        console.log(
+          `    ${i + 1}. ${el.name} - Atributos: ${
+            el.attributes ? el.attributes.length : 0
+          }`
+        );
       }
     });
     if (connections && connections.length > 0) {
       connections.forEach((conn, i) => {
-        console.log(`    ${i + 1}. ${conn.type}: ${conn.source}(${conn.sourceMultiplicity}) -> ${conn.target}(${conn.targetMultiplicity})`);
+        console.log(
+          `    ${i + 1}. ${conn.type}: ${conn.source}(${
+            conn.sourceMultiplicity
+          }) -> ${conn.target}(${conn.targetMultiplicity})`
+        );
       });
     }
-    const classElements = elements.filter(el => el.type === 'class');
+    const classElements = elements.filter((el) => el.type === "class");
     if (classElements.length === 0) {
-      return response(res, 400, { error: 'No hay clases UML para generar entidades Spring Boot' });
+      return response(res, 400, {
+        error: "No hay clases UML para generar entidades Spring Boot",
+      });
     }
-    const processedData = this.procesarElementosConRelaciones(classElements, connections || []);
-    const projectName = 'spring-boot-project';
+    const processedData = this.procesarElementosConRelaciones(
+      classElements,
+      connections || []
+    );
+    const projectName = "spring-boot-project";
     try {
       await this.crearProyectoSpringBootCompleto(projectName, processedData);
       await new Promise((resolve) => setTimeout(resolve, 3000));
       await this.comprimirProyecto(projectName);
       await this.enviarZip(res, projectName);
     } catch (error) {
-      console.error('❌ Error generando proyecto Spring Boot:', error.message);
+      console.error("❌ Error generando proyecto Spring Boot:", error.message);
       return response(res, 500, {
-        error: 'Error generando proyecto Spring Boot',
-        detalles: error.message
+        error: "Error generando proyecto Spring Boot",
+        detalles: error.message,
       });
     }
   };
@@ -151,58 +191,81 @@ class CrearPaginaController {
     try {
       const [sala] = await getSalaById(id);
       if (!sala) {
-        return response(res, 404, { error: 'Sala no encontrada' });
+        return response(res, 404, { error: "Sala no encontrada" });
       }
-      if (!sala.xml || sala.xml.trim() === '') {
-        return response(res, 400, { error: 'La sala no tiene contenido XML para exportar' });
+      if (!sala.xml || sala.xml.trim() === "") {
+        return response(res, 400, {
+          error: "La sala no tiene contenido XML para exportar",
+        });
       }
       let salaData;
       try {
         salaData = JSON.parse(sala.xml);
       } catch (parseError) {
         console.error(`❌ Error parseando XML de sala:`, parseError);
-        return response(res, 400, { error: 'El XML de la sala no es válido' });
+        return response(res, 400, { error: "El XML de la sala no es válido" });
       }
       let elements = [];
       let connections = [];
       if (salaData.elements) {
         if (Array.isArray(salaData.elements)) {
           elements = salaData.elements;
-        } else if (typeof salaData.elements === 'object') {
+        } else if (typeof salaData.elements === "object") {
           elements = Object.values(salaData.elements);
         }
       }
       if (salaData.connections) {
         if (Array.isArray(salaData.connections)) {
           connections = salaData.connections;
-        } else if (typeof salaData.connections === 'object') {
+        } else if (typeof salaData.connections === "object") {
           connections = Object.values(salaData.connections);
         }
       }
       if (elements.length === 0) {
-        return response(res, 400, { error: 'No hay elementos UML en la sala para generar Spring Boot' });
+        return response(res, 400, {
+          error: "No hay elementos UML en la sala para generar Spring Boot",
+        });
       }
-      const classElements = elements.filter(el => el.type === 'class');
+      const classElements = elements.filter((el) => el.type === "class");
       if (classElements.length === 0) {
-        return response(res, 400, { error: 'No hay clases UML en la sala para generar entidades Spring Boot' });
+        return response(res, 400, {
+          error:
+            "No hay clases UML en la sala para generar entidades Spring Boot",
+        });
       }
       classElements.forEach((el, i) => {
-        console.log(`    ${i + 1}. ${el.name} (${el.type}) - Atributos: ${el.attributes ? el.attributes.length : 0}`);
+        console.log(
+          `    ${i + 1}. ${el.name} (${el.type}) - Atributos: ${
+            el.attributes ? el.attributes.length : 0
+          }`
+        );
       });
       connections.forEach((conn, i) => {
-        console.log(`    ${i + 1}. ${conn.type}: ${conn.source}(${conn.sourceMultiplicity}) -> ${conn.target}(${conn.targetMultiplicity})`);
+        console.log(
+          `    ${i + 1}. ${conn.type}: ${conn.source}(${
+            conn.sourceMultiplicity
+          }) -> ${conn.target}(${conn.targetMultiplicity})`
+        );
       });
-      const processedData = this.procesarElementosConRelaciones(classElements, connections);
-      const projectName = `spring-boot-${sala.title.toLowerCase().replace(/\s+/g, '-')}`;
+      const processedData = this.procesarElementosConRelaciones(
+        classElements,
+        connections
+      );
+      const projectName = `spring-boot-${sala.title
+        .toLowerCase()
+        .replace(/\s+/g, "-")}`;
       await this.crearProyectoSpringBootCompleto(projectName, processedData);
       await new Promise((resolve) => setTimeout(resolve, 3000));
       await this.comprimirProyecto(projectName);
       await this.enviarZip(res, projectName);
     } catch (error) {
-      console.error('❌ Error exportando Spring Boot desde sala:', error.message);
+      console.error(
+        "❌ Error exportando Spring Boot desde sala:",
+        error.message
+      );
       return response(res, 500, {
-        error: 'Error exportando Spring Boot desde sala',
-        detalles: error.message
+        error: "Error exportando Spring Boot desde sala",
+        detalles: error.message,
       });
     }
   };
@@ -267,7 +330,7 @@ class CrearPaginaController {
         </plugins>
     </build>
 </project>`;
-    fs.writeFileSync(path.join(projectPath, 'pom.xml'), pomContent);
+    fs.writeFileSync(path.join(projectPath, "pom.xml"), pomContent);
   };
 
   generarApplicationProperties = (projectPath) => {
@@ -318,7 +381,10 @@ logging.level.org.hibernate.type.descriptor.sql.BasicBinder=WARN
 # 2. Ejecuta: mvnw spring-boot:run --spring.profiles.active=postgresql
 # 3. Usa el archivo: application-postgresql.properties
 `;
-    fs.writeFileSync(path.join(projectPath, 'src/main/resources/application.properties'), propertiesContent);
+    fs.writeFileSync(
+      path.join(projectPath, "src/main/resources/application.properties"),
+      propertiesContent
+    );
     this.generarApplicationPostgreSQL(projectPath);
   };
 
@@ -382,7 +448,13 @@ spring.h2.console.enabled=false
 logging.level.org.hibernate.SQL=INFO
 logging.level.org.hibernate.type.descriptor.sql.BasicBinder=INFO
 `;
-    fs.writeFileSync(path.join(projectPath, 'src/main/resources/application-postgresql.properties'), postgresqlContent);
+    fs.writeFileSync(
+      path.join(
+        projectPath,
+        "src/main/resources/application-postgresql.properties"
+      ),
+      postgresqlContent
+    );
   };
 
   generarDemoApplication = (projectPath) => {
@@ -397,17 +469,23 @@ public class DemoApplication {
         SpringApplication.run(DemoApplication.class, args);
     }
 }`;
-    fs.writeFileSync(path.join(projectPath, 'src/main/java/com/example/demo/DemoApplication.java'), appContent);
+    fs.writeFileSync(
+      path.join(
+        projectPath,
+        "src/main/java/com/example/demo/DemoApplication.java"
+      ),
+      appContent
+    );
   };
 
   generarEndpointsRelaciones = (className, relacionesElement) => {
     if (!relacionesElement || relacionesElement.length === 0) {
-      return '    // Sin endpoints adicionales para relaciones';
+      return "    // Sin endpoints adicionales para relaciones";
     }
     let endpoints = `
     // ===== ENDPOINTS ESPECÍFICOS PARA RELACIONES =====`;
-    relacionesElement.forEach(relacion => {
-      const nombreRelacion = relacion.fkName.replace('Id', '');
+    relacionesElement.forEach((relacion) => {
+      const nombreRelacion = relacion.fkName.replace("Id", "");
       const tipoRelacionado = relacion.referenciaA;
       endpoints += `
         
@@ -415,7 +493,9 @@ public class DemoApplication {
      * GET /api/${className.toLowerCase()}/by-${nombreRelacion.toLowerCase()}/{${nombreRelacion}Id}
      */
     @GetMapping("/by-${nombreRelacion.toLowerCase()}/{${nombreRelacion}Id}")
-    public ResponseEntity<List<${className}>> getBy${this.capitalize(nombreRelacion)}(
+    public ResponseEntity<List<${className}>> getBy${this.capitalize(
+        nombreRelacion
+      )}(
             @PathVariable ${relacion.fkType} ${nombreRelacion}Id) {
         // TODO: Implementar búsqueda por relación
         List<${className}> result = ${className.toLowerCase()}Service.findAll();
@@ -445,7 +525,10 @@ public class DemoApplication {
 distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.5/apache-maven-3.9.5-bin.zip
 wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-wrapper/3.2.0/maven-wrapper-3.2.0.jar`;
 
-    fs.writeFileSync(path.join(projectPath, '.mvn/wrapper/maven-wrapper.properties'), wrapperProperties);
+    fs.writeFileSync(
+      path.join(projectPath, ".mvn/wrapper/maven-wrapper.properties"),
+      wrapperProperties
+    );
     const mvnwCmd = `@REM ----------------------------------------------------------------------------
 @REM Licensed to the Apache Software Foundation (ASF) under one
 @REM or more contributor license agreements.  See the NOTICE file
@@ -633,7 +716,7 @@ if "%MAVEN_BATCH_PAUSE%"=="on" pause
 if "%MAVEN_TERMINATE_CMD%"=="on" exit %ERROR_CODE%
 
 cmd /C exit /B %ERROR_CODE%`;
-    fs.writeFileSync(path.join(projectPath, 'mvnw.cmd'), mvnwCmd);
+    fs.writeFileSync(path.join(projectPath, "mvnw.cmd"), mvnwCmd);
   };
 
   generarDTOsParaEntidad = async (projectPath, element, relacionesElement) => {
@@ -682,7 +765,10 @@ public class ${className}DTO {
     }
     dtoContent += `}`;
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/dto/${className}DTO.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/dto/${className}DTO.java`
+      ),
       dtoContent
     );
   };
@@ -721,178 +807,260 @@ build/
 
 ### VS Code ###
 .vscode/`;
-    fs.writeFileSync(path.join(projectPath, '.gitignore'), gitignoreContent);
+    fs.writeFileSync(path.join(projectPath, ".gitignore"), gitignoreContent);
   };
 
   generarReadmeConRelaciones = (projectPath, elements, connections) => {
-    const classNames = elements.filter(e => e.type === 'class').map(e => e.name);
+    const classNames = elements
+      .filter((e) => e.type === "class")
+      .map((e) => e.name);
     const totalRelaciones = connections ? connections.length : 0;
     const tiposRelaciones = {};
     if (connections) {
-      connections.forEach(conn => {
+      connections.forEach((conn) => {
         tiposRelaciones[conn.type] = (tiposRelaciones[conn.type] || 0) + 1;
       });
     }
-    const readmeContent = `# 🚀 Spring Boot Project - Generated from UML with Relations
+    //     const readmeContent = `# 🚀 Spring Boot Project - Generated from UML with Relations
 
-Este proyecto fue generado automáticamente desde un diagrama UML **CON SOPORTE COMPLETO PARA RELACIONES**.
+    // Este proyecto fue generado automáticamente desde un diagrama UML **CON SOPORTE COMPLETO PARA RELACIONES**.
 
-## 📊 Resumen del Proyecto
+    // ## 📊 Resumen del Proyecto
 
-### 🏛️ Entidades generadas: ${classNames.length}
-${classNames.map(name => `- **${name}**`).join('\n')}
+    // ### 🏛️ Entidades generadas: ${classNames.length}
+    // ${classNames.map(name => `- **${name}**`).join('\n')}
 
-### 🔗 Relaciones implementadas: ${totalRelaciones}
-${Object.entries(tiposRelaciones).map(([tipo, cantidad]) =>
-      `- **${tipo.charAt(0).toUpperCase() + tipo.slice(1)}**: ${cantidad}`
-    ).join('\n')}
+    // ### 🔗 Relaciones implementadas: ${totalRelaciones}
+    // ${Object.entries(tiposRelaciones).map(([tipo, cantidad]) =>
+    //       `- **${tipo.charAt(0).toUpperCase() + tipo.slice(1)}**: ${cantidad}`
+    //     ).join('\n')}
 
-## ⚡ Inicio Rápido (H2 - Recomendado)
+    // ## ⚡ Inicio Rápido (H2 - Recomendado)
 
-### Prerrequisitos:
-- ☕ Java 17 o superior
-- 🛠️ No necesitas instalar Maven (incluye wrapper)
+    // ### Prerrequisitos:
+    // - ☕ Java 17 o superior
+    // - 🛠️ No necesitas instalar Maven (incluye wrapper)
 
-### Ejecutar el proyecto:
-\`\`\`bash
-# Windows
-.\\mvnw.cmd spring-boot:run
+    // ### Ejecutar el proyecto:
+    // \`\`\`bash
+    // # Windows
+    // .\\mvnw.cmd spring-boot:run
 
-# Linux/Mac  
-./mvnw spring-boot:run
-\`\`\`
+    // # Linux/Mac
+    // ./mvnw spring-boot:run
+    // \`\`\`
 
-### 🎯 Acceso inmediato:
-- **API REST**: http://localhost:8080/api/
-- **H2 Console**: http://localhost:8080/h2-console
-  - JDBC URL: \`jdbc:h2:mem:testdb\`
-  - Usuario: \`sa\`
-  - Contraseña: \`password\`
+    // ### 🎯 Acceso inmediato:
+    // - **API REST**: http://localhost:8080/api/
+    // - **H2 Console**: http://localhost:8080/h2-console
+    //   - JDBC URL: \`jdbc:h2:mem:testdb\`
+    //   - Usuario: \`sa\`
+    //   - Contraseña: \`password\`
+
+    // ## 🐘 PostgreSQL (Producción)
+
+    // ### Prerrequisitos:
+    // 1. PostgreSQL instalado y ejecutándose
+    // 2. Crear base de datos:
+    //    \`\`\`sql
+    //    CREATE DATABASE springboot_db;
+    //    \`\`\`
+
+    // ### Ejecutar con PostgreSQL:
+    // \`\`\`bash
+    // # Windows
+    // .\\mvnw.cmd spring-boot:run --spring.profiles.active=postgresql
+
+    // # Linux/Mac
+    // ./mvnw spring-boot:run --spring.profiles.active=postgresql
+    // \`\`\`
+
+    // ## 📚 Endpoints API
+
+    // ${classNames.map(name => `### 🔹 ${name}
+    // - \`GET    /api/${name.toLowerCase()}\` - Listar todos
+    // - \`GET    /api/${name.toLowerCase()}?includeRelaciones=true\` - Listar con relaciones
+    // - \`GET    /api/${name.toLowerCase()}/{id}\` - Obtener por ID
+    // - \`GET    /api/${name.toLowerCase()}/{id}?includeRelaciones=true\` - Obtener con relaciones
+    // - \`POST   /api/${name.toLowerCase()}\` - Crear nuevo
+    // - \`PUT    /api/${name.toLowerCase()}/{id}\` - Actualizar
+    // - \`DELETE /api/${name.toLowerCase()}/{id}\` - Eliminar
+    // - \`GET    /api/${name.toLowerCase()}/count\` - Contar registros`).join('\n\n')}
+
+    // ## 🔗 Características de Relaciones
+
+    // ### ✅ Tipos de relación soportados:
+    // - **Association** (Asociación)
+    // - **Aggregation** (Agregación)
+    // - **Composition** (Composición)
+    // - **Inheritance** (Herencia)
+    // - **Dependency** (Dependencia) - Solo lógica
+    // - **Implementation** (Implementación) - Solo lógica
+
+    // ### 🗄️ Mapeo automático a BD:
+    // - Foreign Keys generadas automáticamente
+    // - Anotaciones JPA correctas (@ManyToOne, @OneToMany, etc.)
+    // - Herencia con estrategia TABLE_PER_CLASS
+    // - Validación de integridad referencial
+
+    // ### 📋 Funcionalidades avanzadas:
+    // - **DTOs** generados para transferencia de datos
+    // - **Lazy/Eager loading** configurable
+    // - **Consultas con relaciones** incluidas
+    // - **Endpoints específicos** para navegar relaciones
+    // - **Validación** de relaciones antes de persistir
+    // - **Documentación** automática de relaciones
+
+    // ## 🛠️ Comandos Útiles
+
+    // ### Compilar:
+    // \`\`\`bash
+    // .\\mvnw.cmd clean package
+    // \`\`\`
+
+    // ### Ejecutar JAR:
+    // \`\`\`bash
+    // java -jar target\\demo-0.0.1-SNAPSHOT.jar
+    // \`\`\`
+
+    // ### Ejecutar tests:
+    // \`\`\`bash
+    // .\\mvnw.cmd test
+    // \`\`\`
+
+    // ## 📖 Documentación Adicional
+
+    // - **RELACIONES.md** - Documentación detallada de todas las relaciones
+    // - **H2 Console** - Explorar base de datos en desarrollo
+    // - **Swagger/OpenAPI** - Documentación automática de APIs (si está habilitado)
+
+    // ## 🚨 Notas Importantes
+
+    // ### Para Desarrollo:
+    // - Usa H2 para desarrollo rápido (datos en memoria)
+    // - Las tablas se recrean cada vez que inicias la aplicación
+    // - Perfecto para testing y prototipado
+
+    // ### Para Producción:
+    // - Configura PostgreSQL para datos persistentes
+    // - Las relaciones se validan automáticamente
+    // - Considera configurar pools de conexiones
+
+    // ## 🎯 Próximos Pasos
+
+    // 1. **Explora las entidades** en \`/src/main/java/com/example/demo/entity/\`
+    // 2. **Revisa las relaciones** en el archivo \`RELACIONES.md\`
+    // 3. **Testa los endpoints** usando Postman o curl
+    // 4. **Personaliza la lógica** de negocio en los servicios
+    // 5. **Configura validaciones** adicionales según tus reglas de negocio
+
+    // ## 🔧 Personalización
+
+    // ### Modificar relaciones:
+    // - Edita las anotaciones JPA en las entidades
+    // - Ajusta los fetch types (LAZY/EAGER) según necesidad
+    // - Configura cascadas (CascadeType) apropiadas
+
+    // ### Agregar validaciones:
+    // - Usa Bean Validation en los DTOs
+    // - Implementa validaciones custom en los servicios
+    // - Configura constraints de BD según necesidad
+
+    // ---
+
+    // **¡Proyecto generado exitosamente con soporte completo para relaciones UML!** 🎉
+
+    // Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
+    // `;
+    const readmeContent = `# 🚀 Spring Boot desde UML (con Relaciones)
+
+Proyecto generado automáticamente desde UML con **soporte completo de relaciones**.
+
+## 📊 Resumen
+- **Entidades**: ${classNames.length}
+${classNames.map((n) => `  - **${n}**`).join("\n")}
+- **Relaciones**: ${totalRelaciones}
+${Object.entries(tiposRelaciones)
+  .map(([t, c]) => `  - **${t.charAt(0).toUpperCase() + t.slice(1)}**: ${c}`)
+  .join("\n")}
+
+## ⚡ Inicio Rápido (H2)
+**Requisitos:** Java 17+ (usa el wrapper Maven incluido)
+**Ejecutar:**
+- Windows: \`.\\mvnw.cmd spring-boot:run\`
+- Linux/Mac: \`./mvnw spring-boot:run\`
+
+**Accesos:**
+- API: http://localhost:8080/api/
+- H2: http://localhost:8080/h2-console  
+  JDBC: \`jdbc:h2:mem:testdb\` | User: \`sa\` | Pass: \`password\`
 
 ## 🐘 PostgreSQL (Producción)
-
-### Prerrequisitos:
-1. PostgreSQL instalado y ejecutándose
-2. Crear base de datos:
-   \`\`\`sql
-   CREATE DATABASE springboot_db;
-   \`\`\`
-
-### Ejecutar con PostgreSQL:
-\`\`\`bash
-# Windows
-.\\mvnw.cmd spring-boot:run --spring.profiles.active=postgresql
-
-# Linux/Mac
-./mvnw spring-boot:run --spring.profiles.active=postgresql
+**Preparar:**
+\`\`\`sql
+CREATE DATABASE springboot_db;
 \`\`\`
+**Ejecutar:**
+- Windows: \`.\\mvnw.cmd spring-boot:run --spring.profiles.active=postgresql\`
+- Linux/Mac: \`./mvnw spring-boot:run --spring.profiles.active=postgresql\`
 
-## 📚 Endpoints API
+## 📚 Endpoints por Entidad
+${classNames
+  .map((n) => {
+    const base = `/api/${n.toLowerCase()}`;
+    return `### ${n}
+- \`GET    ${base}\` — Listar
+- \`GET    ${base}?includeRelaciones=true\` — Listar + relaciones
+- \`GET    ${base}/{id}\` — Por ID
+- \`GET    ${base}/{id}?includeRelaciones=true\` — Por ID + relaciones
+- \`POST   ${base}\` — Crear
+- \`PUT    ${base}/{id}\` — Actualizar
+- \`DELETE ${base}/{id}\` — Eliminar
+- \`GET    ${base}/count\` — Conteo`;
+  })
+  .join("\n\n")}
 
-${classNames.map(name => `### 🔹 ${name}
-- \`GET    /api/${name.toLowerCase()}\` - Listar todos
-- \`GET    /api/${name.toLowerCase()}?includeRelaciones=true\` - Listar con relaciones
-- \`GET    /api/${name.toLowerCase()}/{id}\` - Obtener por ID  
-- \`GET    /api/${name.toLowerCase()}/{id}?includeRelaciones=true\` - Obtener con relaciones
-- \`POST   /api/${name.toLowerCase()}\` - Crear nuevo
-- \`PUT    /api/${name.toLowerCase()}/{id}\` - Actualizar
-- \`DELETE /api/${name.toLowerCase()}/{id}\` - Eliminar
-- \`GET    /api/${name.toLowerCase()}/count\` - Contar registros`).join('\n\n')}
+## 🔗 Relaciones (Soporte)
+- **Association, Aggregation, Composition, Inheritance**
+- **Dependency / Implementation** (lógicas)
+- **BD**: FKs auto, JPA (@ManyToOne/@OneToMany/etc.), herencia \`TABLE_PER_CLASS\`, integridad validada
 
-## 🔗 Características de Relaciones
+## ⚙️ Funcionalidades
+- DTOs, Lazy/Eager configurable, consultas con relaciones, endpoints de navegación, validaciones, (opcional) Swagger/OpenAPI
 
-### ✅ Tipos de relación soportados:
-- **Association** (Asociación)
-- **Aggregation** (Agregación) 
-- **Composition** (Composición)
-- **Inheritance** (Herencia)
-- **Dependency** (Dependencia) - Solo lógica
-- **Implementation** (Implementación) - Solo lógica
+## 🛠️ Comandos
+- Compilar: \`.\\mvnw.cmd clean package\`
+- Ejecutar JAR: \`java -jar target\\demo-0.0.1-SNAPSHOT.jar\`
+- Tests: \`.\\mvnw.cmd test\`
 
-### 🗄️ Mapeo automático a BD:
-- Foreign Keys generadas automáticamente
-- Anotaciones JPA correctas (@ManyToOne, @OneToMany, etc.)
-- Herencia con estrategia TABLE_PER_CLASS
-- Validación de integridad referencial
+## 📝 Notas
+**Dev (H2):** rápido, en memoria, recrea tablas.  
+**Prod (PostgreSQL):** persistencia, validar relaciones, configurar pool.
 
-### 📋 Funcionalidades avanzadas:
-- **DTOs** generados para transferencia de datos
-- **Lazy/Eager loading** configurable
-- **Consultas con relaciones** incluidas
-- **Endpoints específicos** para navegar relaciones
-- **Validación** de relaciones antes de persistir
-- **Documentación** automática de relaciones
-
-## 🛠️ Comandos Útiles
-
-### Compilar:
-\`\`\`bash
-.\\mvnw.cmd clean package
-\`\`\`
-
-### Ejecutar JAR:
-\`\`\`bash
-java -jar target\\demo-0.0.1-SNAPSHOT.jar
-\`\`\`
-
-### Ejecutar tests:
-\`\`\`bash
-.\\mvnw.cmd test
-\`\`\`
-
-## 📖 Documentación Adicional
-
-- **RELACIONES.md** - Documentación detallada de todas las relaciones
-- **H2 Console** - Explorar base de datos en desarrollo
-- **Swagger/OpenAPI** - Documentación automática de APIs (si está habilitado)
-
-## 🚨 Notas Importantes
-
-### Para Desarrollo:
-- Usa H2 para desarrollo rápido (datos en memoria)
-- Las tablas se recrean cada vez que inicias la aplicación
-- Perfecto para testing y prototipado
-
-### Para Producción:
-- Configura PostgreSQL para datos persistentes
-- Las relaciones se validan automáticamente
-- Considera configurar pools de conexiones
-
-## 🎯 Próximos Pasos
-
-1. **Explora las entidades** en \`/src/main/java/com/example/demo/entity/\`
-2. **Revisa las relaciones** en el archivo \`RELACIONES.md\`
-3. **Testa los endpoints** usando Postman o curl
-4. **Personaliza la lógica** de negocio en los servicios
-5. **Configura validaciones** adicionales según tus reglas de negocio
+## ▶️ Próximos Pasos
+1) Revisar entidades: \`/src/main/java/com/example/demo/entity/\`  
+2) Ver \`RELACIONES.md\`  
+3) Probar con Postman/curl  
+4) Ajustar servicios (negocio)  
+5) Añadir validaciones
 
 ## 🔧 Personalización
-
-### Modificar relaciones:
-- Edita las anotaciones JPA en las entidades
-- Ajusta los fetch types (LAZY/EAGER) según necesidad
-- Configura cascadas (CascadeType) apropiadas
-
-### Agregar validaciones:
-- Usa Bean Validation en los DTOs
-- Implementa validaciones custom en los servicios
-- Configura constraints de BD según necesidad
+- Relaciones: modificar anotaciones JPA, \`fetch\` (LAZY/EAGER), \`CascadeType\`
+- Validaciones: Bean Validation en DTOs + reglas en servicios + constraints en BD
 
 ---
-
-**¡Proyecto generado exitosamente con soporte completo para relaciones UML!** 🎉
-
-Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
+**Proyecto generado con soporte completo para relaciones UML.** Revisa \`RELACIONES.md\`. 🎉
 `;
-    fs.writeFileSync(path.join(projectPath, 'README.md'), readmeContent);
+
+    fs.writeFileSync(path.join(projectPath, "README.md"), readmeContent);
   };
 
   generateFieldWithAnnotations = (attr, isPK) => {
-    let field = '';
-    let annotations = '';
+    let field = "";
+    let annotations = "";
     const exactColumnName = attr.name;
     if (isPK) {
-      if (attr.type === 'String') {
+      if (attr.type === "String") {
         annotations += `    @Id
     @Column(name = "${exactColumnName}", length = 50)
     @NotBlank
@@ -905,15 +1073,15 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
       }
     } else {
       annotations += `    @Column(name = "${exactColumnName}"`;
-      if (attr.type === 'String') {
+      if (attr.type === "String") {
         annotations += `, length = 255`;
       }
       annotations += `)
 `;
-      if (attr.type === 'String') {
+      if (attr.type === "String") {
         annotations += `    @Size(max = 255, message = "${attr.name} no puede exceder 255 caracteres")
 `;
-      } else if (['Integer', 'Long', 'Double', 'Float'].includes(attr.type)) {
+      } else if (["Integer", "Long", "Double", "Float"].includes(attr.type)) {
         annotations += `    @NotNull(message = "${attr.name} es requerido")
 `;
       }
@@ -927,15 +1095,15 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
   validarEstructuraJSON = (salaData) => {
     const errores = [];
     if (!salaData.elements) {
-      errores.push('No se encontraron elementos en el JSON');
+      errores.push("No se encontraron elementos en el JSON");
     }
     if (salaData.elements && Array.isArray(salaData.elements)) {
-      const clases = salaData.elements.filter(el => el.type === 'class');
+      const clases = salaData.elements.filter((el) => el.type === "class");
       if (clases.length === 0) {
-        errores.push('No hay clases UML en el diagrama');
+        errores.push("No hay clases UML en el diagrama");
       }
       clases.forEach((clase, index) => {
-        if (!clase.name || clase.name.trim() === '') {
+        if (!clase.name || clase.name.trim() === "") {
           errores.push(`Clase ${index + 1} no tiene nombre válido`);
         }
         if (!clase.attributes || !Array.isArray(clase.attributes)) {
@@ -952,7 +1120,9 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
           errores.push(`Conexión ${index + 1} no tiene tipo definido`);
         }
         if (!conn.sourceMultiplicity || !conn.targetMultiplicity) {
-          errores.push(`Conexión ${index + 1} no tiene multiplicidades definidas`);
+          errores.push(
+            `Conexión ${index + 1} no tiene multiplicidades definidas`
+          );
         }
       });
     }
@@ -960,125 +1130,160 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
   };
 
   logProcesamientoCompleto = (elements, connections, relaciones, herencia) => {
-    elements.forEach(element => {
+    elements.forEach((element) => {
       const elementRelaciones = relaciones[element.id] || [];
       const esHerencia = herencia[element.id];
       if (esHerencia) {
         if (esHerencia.esClasePadre) {
-          console.log(`   - Es clase PADRE de: [${esHerencia.hijos.join(', ')}]`);
+          console.log(
+            `   - Es clase PADRE de: [${esHerencia.hijos.join(", ")}]`
+          );
         } else {
           console.log(`   - Es clase HIJA de: ${esHerencia.clasePadre}`);
         }
       }
-      elementRelaciones.forEach(rel => {
-        console.log(`   - FK: ${rel.fkName} (${rel.fkType}) -> ${rel.referenciaA} [${rel.tipoRelacion}]`);
+      elementRelaciones.forEach((rel) => {
+        console.log(
+          `   - FK: ${rel.fkName} (${rel.fkType}) -> ${rel.referenciaA} [${rel.tipoRelacion}]`
+        );
       });
     });
   };
 
   debugRelaciones = (connections, elements) => {
     connections.forEach((conn, index) => {
-      const sourceEl = elements.find(e => e.id === conn.source);
-      const targetEl = elements.find(e => e.id === conn.target);
-      let fkDestino = 'No determinado';
-      if ((conn.sourceMultiplicity === '*' && conn.targetMultiplicity === '1') ||
-        (conn.sourceMultiplicity === '1' && conn.targetMultiplicity === '*' && conn.type === 'inheritance')) {
+      const sourceEl = elements.find((e) => e.id === conn.source);
+      const targetEl = elements.find((e) => e.id === conn.target);
+      let fkDestino = "No determinado";
+      if (
+        (conn.sourceMultiplicity === "*" && conn.targetMultiplicity === "1") ||
+        (conn.sourceMultiplicity === "1" &&
+          conn.targetMultiplicity === "*" &&
+          conn.type === "inheritance")
+      ) {
         fkDestino = sourceEl?.name || conn.source;
-      } else if (conn.sourceMultiplicity === '1' && conn.targetMultiplicity === '*') {
+      } else if (
+        conn.sourceMultiplicity === "1" &&
+        conn.targetMultiplicity === "*"
+      ) {
         fkDestino = targetEl?.name || conn.target;
       }
     });
   };
 
   parseAttribute = (attribute) => {
-    if (typeof attribute === 'object' && attribute !== null) {
+    if (typeof attribute === "object" && attribute !== null) {
       if (attribute.isForeignKey === true || attribute.isPrimaryKey === true) {
-        const pkStatus = attribute.isPrimaryKey === true ? 'PK:true' : '';
-        const fkStatus = attribute.isForeignKey === true ? 'FK:true' : '';
-        const statusStr = [pkStatus, fkStatus].filter(s => s).join(', ');
+        const pkStatus = attribute.isPrimaryKey === true ? "PK:true" : "";
+        const fkStatus = attribute.isForeignKey === true ? "FK:true" : "";
+        const statusStr = [pkStatus, fkStatus].filter((s) => s).join(", ");
         console.log(`🔍 ParseAttribute: ${attribute.name} - ${statusStr}`);
       }
-      const visibility = attribute.visibility === 'private' ? '-' :
-        attribute.visibility === 'protected' ? '#' : '+';
-      let type = attribute.type || 'String';
-      const name = attribute.name || 'field';
-      if (type === 'int' || type === 'Integer') type = 'Integer';
-      else if (type === 'double' || type === 'Double') type = 'Double';
-      else if (type === 'bool' || type === 'boolean') type = 'Boolean';
-      else if (type === 'string' || type === 'String') type = 'String';
-      else if (type === 'long' || type === 'Long') type = 'Long';
-      else if (type === 'float' || type === 'Float') type = 'Float';
-      else if (type && type.length > 0 && type[0] === type[0].toUpperCase() &&
-        !['Long', 'Integer', 'String', 'Boolean', 'Double', 'Float'].includes(type)) {
-        type = 'Long';
+      const visibility =
+        attribute.visibility === "private"
+          ? "-"
+          : attribute.visibility === "protected"
+          ? "#"
+          : "+";
+      let type = attribute.type || "String";
+      const name = attribute.name || "field";
+      if (type === "int" || type === "Integer") type = "Integer";
+      else if (type === "double" || type === "Double") type = "Double";
+      else if (type === "bool" || type === "boolean") type = "Boolean";
+      else if (type === "string" || type === "String") type = "String";
+      else if (type === "long" || type === "Long") type = "Long";
+      else if (type === "float" || type === "Float") type = "Float";
+      else if (
+        type &&
+        type.length > 0 &&
+        type[0] === type[0].toUpperCase() &&
+        !["Long", "Integer", "String", "Boolean", "Double", "Float"].includes(
+          type
+        )
+      ) {
+        type = "Long";
       }
       return [visibility, type, name];
     }
-    if (typeof attribute === 'string') {
+    if (typeof attribute === "string") {
       const match = attribute.match(/^([+\-#~])?\s*(\w+)?\s+(\w+)$/);
       if (match) {
-        const visibility = match[1] || '+';
-        let type = match[2] || 'String';
+        const visibility = match[1] || "+";
+        let type = match[2] || "String";
         const name = match[3];
-        if (type === 'int' || type === 'Integer') type = 'Integer';
-        else if (type === 'double' || type === 'Double') type = 'Double';
-        else if (type === 'bool' || type === 'boolean') type = 'Boolean';
-        else if (type === 'string' || type === 'String') type = 'String';
-        else if (type === 'long' || type === 'Long') type = 'Long';
-        else if (type === 'float' || type === 'Float') type = 'Float';
-        else if (type && type.length > 0 && type[0] === type[0].toUpperCase() &&
-          !['Long', 'Integer', 'String', 'Boolean', 'Double', 'Float'].includes(type)) {
-          type = 'String';
+        if (type === "int" || type === "Integer") type = "Integer";
+        else if (type === "double" || type === "Double") type = "Double";
+        else if (type === "bool" || type === "boolean") type = "Boolean";
+        else if (type === "string" || type === "String") type = "String";
+        else if (type === "long" || type === "Long") type = "Long";
+        else if (type === "float" || type === "Float") type = "Float";
+        else if (
+          type &&
+          type.length > 0 &&
+          type[0] === type[0].toUpperCase() &&
+          !["Long", "Integer", "String", "Boolean", "Double", "Float"].includes(
+            type
+          )
+        ) {
+          type = "String";
         }
         return [visibility, type, name];
       }
     }
-    return ['+', 'String', 'field'];
+    return ["+", "String", "field"];
   };
 
   procesarElementosConRelaciones = (elements, connections) => {
-    const processedElements = elements.map(element => {
+    const processedElements = elements.map((element) => {
       const processedElement = { ...element };
-      if (processedElement.attributes && Array.isArray(processedElement.attributes)) {
-        processedElement.attributes = processedElement.attributes.map(attr => {
-          if (typeof attr === 'string') {
-            return this.parseStringAttribute(attr);
-          } else if (typeof attr === 'object') {
-            return this.normalizeAttribute(attr);
+      if (
+        processedElement.attributes &&
+        Array.isArray(processedElement.attributes)
+      ) {
+        processedElement.attributes = processedElement.attributes.map(
+          (attr) => {
+            if (typeof attr === "string") {
+              return this.parseStringAttribute(attr);
+            } else if (typeof attr === "object") {
+              return this.normalizeAttribute(attr);
+            }
+            return attr;
           }
-          return attr;
-        });
+        );
       } else {
         processedElement.attributes = [];
       }
       return processedElement;
     });
-    const relacionesMap = this.analizarRelaciones(processedElements, connections);
-    processedElements.forEach(element => {
+    const relacionesMap = this.analizarRelaciones(
+      processedElements,
+      connections
+    );
+    processedElements.forEach((element) => {
       if (relacionesMap[element.id]) {
         this.agregarForeignKeys(element, relacionesMap[element.id]);
       }
     });
     const herenciaInfo = this.manejarHerencia(processedElements, connections);
-    console.log('✅ Procesamiento completo con relaciones terminado');
+    console.log("✅ Procesamiento completo con relaciones terminado");
     return {
       elements: processedElements,
       herencia: herenciaInfo,
       relaciones: relacionesMap,
-      connections: connections
+      connections: connections,
     };
   };
 
   parseStringAttribute = (attrString) => {
-    const cleanAttrString = (attrString || '').trim();
+    const cleanAttrString = (attrString || "").trim();
     if (!cleanAttrString) {
       return {
-        name: 'defaultField',
-        type: 'String',
-        visibility: 'private',
+        name: "defaultField",
+        type: "String",
+        visibility: "private",
         isPrimaryKey: false,
         isForeignKey: false,
-        isStatic: false
+        isStatic: false,
       };
     }
     const patterns = [
@@ -1086,7 +1291,7 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
       /^([+\-#~])?\s*(\w+)\s+(\w+)$/,
       /^(\w+)\s*:\s*(\w+)$/,
       /^(\w+)\s+(\w+)$/,
-      /^(\w+)$/
+      /^(\w+)$/,
     ];
     let match = null;
     let patternIndex = -1;
@@ -1097,18 +1302,18 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
         break;
       }
     }
-    let visibility = 'private';
-    let name = 'defaultField';
-    let type = 'String';
+    let visibility = "private";
+    let name = "defaultField";
+    let type = "String";
     if (match) {
       switch (patternIndex) {
         case 0:
-          visibility = this.getVisibilityFromSymbol(match[1] || '+');
+          visibility = this.getVisibilityFromSymbol(match[1] || "+");
           name = this.normalizeJavaFieldName(match[2]);
           type = this.mapJavaType(match[3]);
           break;
         case 1:
-          visibility = this.getVisibilityFromSymbol(match[1] || '+');
+          visibility = this.getVisibilityFromSymbol(match[1] || "+");
           type = this.mapJavaType(match[2]);
           name = this.normalizeJavaFieldName(match[3]);
           break;
@@ -1129,99 +1334,141 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
       name,
       type,
       visibility,
-      isPrimaryKey: name.toLowerCase() === 'id',
+      isPrimaryKey: name.toLowerCase() === "id",
       isForeignKey: false,
-      isStatic: false
+      isStatic: false,
     };
   };
 
   normalizeAttribute = (attr) => {
-    const name = this.normalizeJavaFieldName(attr.name || 'defaultField');
+    const name = this.normalizeJavaFieldName(attr.name || "defaultField");
     return {
       name,
-      type: this.mapJavaType(attr.type || 'String'),
-      visibility: attr.visibility || 'private',
-      isPrimaryKey: attr.isPrimaryKey === true || name.toLowerCase() === 'id',
+      type: this.mapJavaType(attr.type || "String"),
+      visibility: attr.visibility || "private",
+      isPrimaryKey: attr.isPrimaryKey === true || name.toLowerCase() === "id",
       isForeignKey: false,
-      isStatic: attr.isStatic === true
+      isStatic: attr.isStatic === true,
     };
   };
 
   normalizeJavaFieldName = (name) => {
-    if (!name || typeof name !== 'string') {
-      return 'defaultField';
+    if (!name || typeof name !== "string") {
+      return "defaultField";
     }
-    let normalized = name.trim().replace(/[^a-zA-Z0-9]/g, '');
+    let normalized = name.trim().replace(/[^a-zA-Z0-9]/g, "");
     if (!normalized) {
-      return 'defaultField';
+      return "defaultField";
     }
     if (!/^[a-zA-Z]/.test(normalized)) {
-      normalized = 'field' + normalized;
+      normalized = "field" + normalized;
     }
     const javaKeywords = [
-      'abstract', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class',
-      'const', 'continue', 'default', 'do', 'double', 'else', 'enum', 'extends',
-      'final', 'finally', 'float', 'for', 'goto', 'if', 'implements', 'import',
-      'instanceof', 'int', 'interface', 'long', 'native', 'new', 'package',
-      'private', 'protected', 'public', 'return', 'short', 'static', 'strictfp',
-      'super', 'switch', 'synchronized', 'this', 'throw', 'throws', 'transient',
-      'try', 'void', 'volatile', 'while'
+      "abstract",
+      "boolean",
+      "break",
+      "byte",
+      "case",
+      "catch",
+      "char",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "do",
+      "double",
+      "else",
+      "enum",
+      "extends",
+      "final",
+      "finally",
+      "float",
+      "for",
+      "goto",
+      "if",
+      "implements",
+      "import",
+      "instanceof",
+      "int",
+      "interface",
+      "long",
+      "native",
+      "new",
+      "package",
+      "private",
+      "protected",
+      "public",
+      "return",
+      "short",
+      "static",
+      "strictfp",
+      "super",
+      "switch",
+      "synchronized",
+      "this",
+      "throw",
+      "throws",
+      "transient",
+      "try",
+      "void",
+      "volatile",
+      "while",
     ];
     if (javaKeywords.includes(normalized.toLowerCase())) {
-      normalized += 'Field';
+      normalized += "Field";
     }
     return normalized;
   };
 
   getVisibilityFromSymbol = (symbol) => {
     const map = {
-      '+': 'public',
-      '-': 'private',
-      '#': 'protected',
-      '~': 'package'
+      "+": "public",
+      "-": "private",
+      "#": "protected",
+      "~": "package",
     };
-    return map[symbol] || 'private';
+    return map[symbol] || "private";
   };
 
   mapJavaType = (type) => {
     const typeMap = {
-      'string': 'String',
-      'String': 'String',
-      'int': 'Integer',
-      'Integer': 'Integer',
-      'long': 'Long',
-      'Long': 'Long',
-      'double': 'Double',
-      'Double': 'Double',
-      'float': 'Float',
-      'Float': 'Float',
-      'boolean': 'Boolean',
-      'Boolean': 'Boolean',
-      'bool': 'Boolean',
-      'date': 'LocalDateTime',
-      'Date': 'LocalDateTime',
-      'LocalDateTime': 'LocalDateTime',
-      'BigDecimal': 'BigDecimal',
-      'UUID': 'UUID'
+      string: "String",
+      String: "String",
+      int: "Integer",
+      Integer: "Integer",
+      long: "Long",
+      Long: "Long",
+      double: "Double",
+      Double: "Double",
+      float: "Float",
+      Float: "Float",
+      boolean: "Boolean",
+      Boolean: "Boolean",
+      bool: "Boolean",
+      date: "LocalDateTime",
+      Date: "LocalDateTime",
+      LocalDateTime: "LocalDateTime",
+      BigDecimal: "BigDecimal",
+      UUID: "UUID",
     };
-    return typeMap[type] || 'String';
+    return typeMap[type] || "String";
   };
 
   crearProyectoSpringBootCompleto = async (projectName, processedData) => {
     const { elements, herencia, relaciones, connections } = processedData;
     const projectPath = path.join(rutaBase, projectName);
     const directories = [
-      'src/main/java/com/example/demo',
-      'src/main/java/com/example/demo/controller',
-      'src/main/java/com/example/demo/service',
-      'src/main/java/com/example/demo/repository',
-      'src/main/java/com/example/demo/entity',
-      'src/main/java/com/example/demo/dto',
-      'src/main/resources',
-      'src/main/resources/static',
-      'src/main/resources/templates',
-      'src/test/java/com/example/demo',
-      '.mvn/wrapper'
+      "src/main/java/com/example/demo",
+      "src/main/java/com/example/demo/controller",
+      "src/main/java/com/example/demo/service",
+      "src/main/java/com/example/demo/repository",
+      "src/main/java/com/example/demo/entity",
+      "src/main/java/com/example/demo/dto",
+      "src/main/resources",
+      "src/main/resources/static",
+      "src/main/resources/templates",
+      "src/test/java/com/example/demo",
+      ".mvn/wrapper",
     ];
     for (const dir of directories) {
       const fullPath = path.join(projectPath, dir);
@@ -1234,7 +1481,7 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
     this.generarGitignore(projectPath);
     this.generarReadmeConRelaciones(projectPath, elements, connections);
     for (const element of elements) {
-      if (element.type === 'class') {
+      if (element.type === "class") {
         await this.generarEntidadConRelaciones(
           projectPath,
           element,
@@ -1242,15 +1489,37 @@ Para consultas específicas, revisa la documentación en \`RELACIONES.md\`
           herencia
         );
         await this.generarRepositorioConRelaciones(projectPath, element);
-        await this.generarServicioConRelaciones(projectPath, element, relaciones[element.id] || []);
-        await this.generarControladorConRelaciones(projectPath, element, relaciones[element.id] || []);
-        await this.generarDTOsParaEntidad(projectPath, element, relaciones[element.id] || []);
+        await this.generarServicioConRelaciones(
+          projectPath,
+          element,
+          relaciones[element.id] || []
+        );
+        await this.generarControladorConRelaciones(
+          projectPath,
+          element,
+          relaciones[element.id] || []
+        );
+        await this.generarDTOsParaEntidad(
+          projectPath,
+          element,
+          relaciones[element.id] || []
+        );
       }
     }
-    await this.generarDocumentacionRelaciones(projectPath, elements, connections, relaciones);
+    await this.generarDocumentacionRelaciones(
+      projectPath,
+      elements,
+      connections,
+      relaciones
+    );
   };
 
-  generarEntidadConRelaciones = async (projectPath, element, relacionesElement, herenciaInfo) => {
+  generarEntidadConRelaciones = async (
+    projectPath,
+    element,
+    relacionesElement,
+    herenciaInfo
+  ) => {
     const className = element.name;
     let entityContent = `package com.example.demo.entity;
 
@@ -1278,13 +1547,21 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
     }
     entityContent += `@Entity
 @Table(name = "${className.toLowerCase()}")`;
-    const relacionesComposicion = relacionesElement.filter(rel => rel.esClavePrimariaCompuesta);
+    const relacionesComposicion = relacionesElement.filter(
+      (rel) => rel.esClavePrimariaCompuesta
+    );
     if (relacionesComposicion.length > 0) {
       entityContent += `
 @IdClass(${className}Id.class)`;
     }
     entityContent += `
-public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaInfo[element.id].clasePadre ? ' extends ' + herenciaInfo[element.id].clasePadre : ' implements Serializable'} {
+public class ${className}${
+      herenciaInfo &&
+      herenciaInfo[element.id] &&
+      herenciaInfo[element.id].clasePadre
+        ? " extends " + herenciaInfo[element.id].clasePadre
+        : " implements Serializable"
+    } {
     
     private static final long serialVersionUID = 1L;
 
@@ -1292,9 +1569,15 @@ public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaI
     let hasPrimaryKey = false;
     let pkField = null;
     let pkType = null;
-    if (!herenciaInfo || !herenciaInfo[element.id] || !herenciaInfo[element.id].clasePadre) {
+    if (
+      !herenciaInfo ||
+      !herenciaInfo[element.id] ||
+      !herenciaInfo[element.id].clasePadre
+    ) {
       if (element.attributes && element.attributes.length > 0) {
-        const userPK = element.attributes.find(attr => attr.isPrimaryKey === true);
+        const userPK = element.attributes.find(
+          (attr) => attr.isPrimaryKey === true
+        );
         if (userPK) {
           hasPrimaryKey = true;
           pkField = userPK.name;
@@ -1311,8 +1594,8 @@ public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaI
         }
       }
       if (!hasPrimaryKey) {
-        pkField = 'id';
-        pkType = 'Long';
+        pkField = "id";
+        pkType = "Long";
         entityContent += `    @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -1332,7 +1615,7 @@ public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaI
       entityContent += `    // ===== FOREIGN KEYS GENERADAS POR RELACIONES =====
 `;
       for (const relacion of relacionesElement) {
-        if (relacion.tipoRelacion !== 'inheritance') {
+        if (relacion.tipoRelacion !== "inheritance") {
           if (relacion.esClavePrimariaCompuesta) {
             entityContent += `    @Id
     @Column(name = "${relacion.fkName}")
@@ -1352,28 +1635,46 @@ public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaI
       entityContent += `    // ===== RELACIONES JPA =====
 `;
       for (const relacion of relacionesElement) {
-        if (relacion.tipoRelacion !== 'inheritance') {
+        if (relacion.tipoRelacion !== "inheritance") {
           entityContent += this.generarCampoRelacionCorregido(relacion);
         }
       }
     }
-    entityContent += this.generarRestoEntidad(className, element, relacionesElement, pkField, pkType);
+    entityContent += this.generarRestoEntidad(
+      className,
+      element,
+      relacionesElement,
+      pkField,
+      pkType
+    );
     if (relacionesComposicion.length > 0) {
-      await this.generarClaseId(projectPath, className, element, relacionesComposicion);
+      await this.generarClaseId(
+        projectPath,
+        className,
+        element,
+        relacionesComposicion
+      );
     }
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/entity/${className}.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/entity/${className}.java`
+      ),
       entityContent
     );
   };
 
   generarCampoRelacionCorregido = (relacionInfo) => {
-    const nombreCampo = relacionInfo.fkName.replace(/Id$/, '').replace(/id$/, '');
+    const nombreCampo = relacionInfo.fkName
+      .replace(/Id$/, "")
+      .replace(/id$/, "");
     const tipoCampo = relacionInfo.referenciaA;
-    let anotaciones = '';
-    let fetchType = relacionInfo.esComposicion ? 'FetchType.EAGER' : 'FetchType.LAZY';
+    let anotaciones = "";
+    let fetchType = relacionInfo.esComposicion
+      ? "FetchType.EAGER"
+      : "FetchType.LAZY";
     switch (relacionInfo.tipoRelacionJPA) {
-      case '@ManyToOne':
+      case "@ManyToOne":
         anotaciones += `    @ManyToOne(fetch = ${fetchType}`;
         if (relacionInfo.esComposicion) {
           anotaciones += `, cascade = CascadeType.ALL`;
@@ -1386,7 +1687,7 @@ public class ${className}${herenciaInfo && herenciaInfo[element.id] && herenciaI
 `;
         }
         break;
-      case '@OneToOne':
+      case "@OneToOne":
         anotaciones += `    @OneToOne(fetch = ${fetchType})
     @JoinColumn(name = "${relacionInfo.fkName}")
 `;
@@ -1400,10 +1701,12 @@ ${anotaciones}    private ${tipoCampo} ${nombreCampo};
 
   generarRepositorioConRelaciones = async (projectPath, element) => {
     const className = element.name;
-    let pkType = 'Long';
-    let pkName = 'id';
+    let pkType = "Long";
+    let pkName = "id";
     if (element.attributes && element.attributes.length > 0) {
-      const userPK = element.attributes.find(attr => attr.isPrimaryKey === true && !attr.isForeignKey);
+      const userPK = element.attributes.find(
+        (attr) => attr.isPrimaryKey === true && !attr.isForeignKey
+      );
       if (userPK) {
         pkType = userPK.type;
         pkName = userPK.name;
@@ -1440,17 +1743,26 @@ public interface ${className}Repository extends JpaRepository<${className}, ${pk
     // Ejemplo: List<${className}> findByNombre(String nombre);
 }`;
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/repository/${className}Repository.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/repository/${className}Repository.java`
+      ),
       repositoryContent
     );
   };
 
-  generarServicioConRelaciones = async (projectPath, element, relacionesElement) => {
+  generarServicioConRelaciones = async (
+    projectPath,
+    element,
+    relacionesElement
+  ) => {
     const className = element.name;
-    let pkType = 'Long';
-    let pkName = 'id';
+    let pkType = "Long";
+    let pkName = "id";
     if (element.attributes && element.attributes.length > 0) {
-      const userPK = element.attributes.find(attr => attr.isPrimaryKey === true && !attr.isForeignKey);
+      const userPK = element.attributes.find(
+        (attr) => attr.isPrimaryKey === true && !attr.isForeignKey
+      );
       if (userPK) {
         pkType = userPK.type;
         pkName = userPK.name;
@@ -1568,17 +1880,26 @@ public class ${className}Service {
     ${this.generarMetodosRelaciones(className, relacionesElement)}
 }`;
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/service/${className}Service.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/service/${className}Service.java`
+      ),
       serviceContent
     );
   };
 
-  generarControladorConRelaciones = async (projectPath, element, relacionesElement) => {
+  generarControladorConRelaciones = async (
+    projectPath,
+    element,
+    relacionesElement
+  ) => {
     const className = element.name;
-    let pkType = 'Long';
-    let pkName = 'id';
+    let pkType = "Long";
+    let pkName = "id";
     if (element.attributes && element.attributes.length > 0) {
-      const userPK = element.attributes.find(attr => attr.isPrimaryKey === true && !attr.isForeignKey);
+      const userPK = element.attributes.find(
+        (attr) => attr.isPrimaryKey === true && !attr.isForeignKey
+      );
       if (userPK) {
         pkType = userPK.type;
         pkName = userPK.name;
@@ -1709,17 +2030,20 @@ public class ${className}Controller {
     ${this.generarEndpointsRelaciones(className, relacionesElement)}
 }`;
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/controller/${className}Controller.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/controller/${className}Controller.java`
+      ),
       controllerContent
     );
   };
 
   analizarRelaciones = (elements, connections) => {
     const relacionesMap = {};
-    elements.forEach(element => {
+    elements.forEach((element) => {
       relacionesMap[element.id] = [];
     });
-    connections.forEach(conn => {
+    connections.forEach((conn) => {
       const tipoRelacion = conn.type;
       const sourceId = conn.source;
       const targetId = conn.target;
@@ -1732,7 +2056,7 @@ public class ${className}Controller {
         sourceMultiplicity,
         targetMultiplicity,
         elements,
-        conn.label || ''
+        conn.label || ""
       );
       if (relacionInfo) {
         relacionesMap[relacionInfo.elementoConFK].push(relacionInfo);
@@ -1741,9 +2065,17 @@ public class ${className}Controller {
     return relacionesMap;
   };
 
-  determinarForeignKey = (tipoRelacion, sourceId, targetId, sourceMult, targetMult, elements, label) => {
-    const sourceElement = elements.find(e => e.id === sourceId);
-    const targetElement = elements.find(e => e.id === targetId);
+  determinarForeignKey = (
+    tipoRelacion,
+    sourceId,
+    targetId,
+    sourceMult,
+    targetMult,
+    elements,
+    label
+  ) => {
+    const sourceElement = elements.find((e) => e.id === sourceId);
+    const targetElement = elements.find((e) => e.id === targetId);
     if (!sourceElement || !targetElement) return null;
     let elementoConFK = null;
     let elementoReferenciado = null;
@@ -1751,62 +2083,64 @@ public class ${className}Controller {
     let esComposicion = false;
     let esClavePrimariaCompuesta = false;
     switch (tipoRelacion) {
-      case 'association':
-        if (sourceMult === '*' && targetMult === '1') {
+      case "association":
+        if (sourceMult === "*" && targetMult === "1") {
           elementoConFK = sourceId;
           elementoReferenciado = targetId;
-          tipoRelacionJPA = '@ManyToOne';
-        } else if (sourceMult === '1' && targetMult === '*') {
+          tipoRelacionJPA = "@ManyToOne";
+        } else if (sourceMult === "1" && targetMult === "*") {
           elementoConFK = targetId;
           elementoReferenciado = sourceId;
-          tipoRelacionJPA = '@ManyToOne';
-        } else if (sourceMult === '1' && targetMult === '1') {
+          tipoRelacionJPA = "@ManyToOne";
+        } else if (sourceMult === "1" && targetMult === "1") {
           elementoConFK = targetId;
           elementoReferenciado = sourceId;
-          tipoRelacionJPA = '@OneToOne';
+          tipoRelacionJPA = "@OneToOne";
         }
         break;
-      case 'aggregation':
-        if (sourceMult === '*' && targetMult === '1') {
+      case "aggregation":
+        if (sourceMult === "*" && targetMult === "1") {
           elementoConFK = sourceId;
           elementoReferenciado = targetId;
-          tipoRelacionJPA = '@ManyToOne';
-        } else if (sourceMult === '1' && targetMult === '*') {
+          tipoRelacionJPA = "@ManyToOne";
+        } else if (sourceMult === "1" && targetMult === "*") {
           elementoConFK = targetId;
           elementoReferenciado = sourceId;
-          tipoRelacionJPA = '@ManyToOne';
+          tipoRelacionJPA = "@ManyToOne";
         }
         break;
-      case 'composition':
+      case "composition":
         esComposicion = true;
-        if (sourceMult === '*' && targetMult === '1') {
+        if (sourceMult === "*" && targetMult === "1") {
           elementoConFK = sourceId;
           elementoReferenciado = targetId;
-          tipoRelacionJPA = '@ManyToOne';
+          tipoRelacionJPA = "@ManyToOne";
           esClavePrimariaCompuesta = true;
-        } else if (sourceMult === '1' && targetMult === '*') {
+        } else if (sourceMult === "1" && targetMult === "*") {
           elementoConFK = targetId;
           elementoReferenciado = sourceId;
-          tipoRelacionJPA = '@ManyToOne';
+          tipoRelacionJPA = "@ManyToOne";
           esClavePrimariaCompuesta = true;
         }
         break;
-      case 'inheritance':
-        if (sourceMult === '*' && targetMult === '1') {
+      case "inheritance":
+        if (sourceMult === "*" && targetMult === "1") {
           return this.crearRelacionHerencia(sourceId, targetId, elements);
-        } else if (sourceMult === '1' && targetMult === '*') {
+        } else if (sourceMult === "1" && targetMult === "*") {
           return this.crearRelacionHerencia(targetId, sourceId, elements);
         }
         break;
-      case 'dependency':
+      case "dependency":
         return null;
-      case 'implementation':
+      case "implementation":
         return null;
     }
     if (!elementoConFK || !elementoReferenciado) return null;
-    const elementoRef = elements.find(e => e.id === elementoReferenciado);
+    const elementoRef = elements.find((e) => e.id === elementoReferenciado);
     const pkRef = this.obtenerAtributoPK(elementoRef);
-    const fkName = `${elementoRef.name.toLowerCase()}${this.capitalize(pkRef.name)}`;
+    const fkName = `${elementoRef.name.toLowerCase()}${this.capitalize(
+      pkRef.name
+    )}`;
     const fkType = pkRef.type;
     return {
       elementoConFK,
@@ -1817,74 +2151,87 @@ public class ${className}Controller {
       fkType,
       esComposicion,
       esClavePrimariaCompuesta,
-      label: label || '',
+      label: label || "",
       referenciaA: elementoRef.name,
       pkReferenciado: pkRef.name,
-      pkReferenciadoTipo: pkRef.type
+      pkReferenciadoTipo: pkRef.type,
     };
   };
 
   obtenerTipoPK = (element) => {
     if (element.attributes && element.attributes.length > 0) {
-      const pkAttr = element.attributes.find(attr => attr.isPrimaryKey === true);
+      const pkAttr = element.attributes.find(
+        (attr) => attr.isPrimaryKey === true
+      );
       if (pkAttr) {
         return pkAttr.type;
       }
     }
-    return 'Long';
+    return "Long";
   };
 
   obtenerAtributoPK = (element) => {
     if (element.attributes && element.attributes.length > 0) {
-      const pkAttr = element.attributes.find(attr => attr.isPrimaryKey === true);
+      const pkAttr = element.attributes.find(
+        (attr) => attr.isPrimaryKey === true
+      );
       if (pkAttr) {
         return {
           name: pkAttr.name,
-          type: pkAttr.type
+          type: pkAttr.type,
         };
       }
     }
     return {
-      name: 'id',
-      type: 'Long'
+      name: "id",
+      type: "Long",
     };
   };
 
   agregarForeignKeys = (element, relaciones) => {
     if (!relaciones || relaciones.length === 0) return;
-    relaciones.forEach(relacion => {
-      const fkExiste = element.attributes.some(attr => attr.name === relacion.fkName);
+    relaciones.forEach((relacion) => {
+      const fkExiste = element.attributes.some(
+        (attr) => attr.name === relacion.fkName
+      );
       if (!fkExiste) {
         const fkAttribute = {
           name: relacion.fkName,
           type: relacion.fkType,
-          visibility: 'private',
+          visibility: "private",
           isPrimaryKey: relacion.esComposicion,
           isForeignKey: true,
           isStatic: false,
-          relacionInfo: relacion
+          relacionInfo: relacion,
         };
         element.attributes.push(fkAttribute);
-        console.log(`✅ FK agregada: ${element.name}.${relacion.fkName} -> ${relacion.referenciaA}`);
+        console.log(
+          `✅ FK agregada: ${element.name}.${relacion.fkName} -> ${relacion.referenciaA}`
+        );
       }
     });
   };
 
   manejarHerencia = (elements, connections) => {
     const herenciaInfo = {};
-    const herenciaConnections = connections.filter(conn => conn.type === 'inheritance');
-    herenciaConnections.forEach(conn => {
+    const herenciaConnections = connections.filter(
+      (conn) => conn.type === "inheritance"
+    );
+    herenciaConnections.forEach((conn) => {
       let padreId, hijoId;
-      if (conn.sourceMultiplicity === '1' && conn.targetMultiplicity === '*') {
+      if (conn.sourceMultiplicity === "1" && conn.targetMultiplicity === "*") {
         padreId = conn.source;
         hijoId = conn.target;
-      } else if (conn.sourceMultiplicity === '*' && conn.targetMultiplicity === '1') {
+      } else if (
+        conn.sourceMultiplicity === "*" &&
+        conn.targetMultiplicity === "1"
+      ) {
         padreId = conn.target;
         hijoId = conn.source;
       }
       if (padreId && hijoId) {
-        const padre = elements.find(e => e.id === padreId);
-        const hijo = elements.find(e => e.id === hijoId);
+        const padre = elements.find((e) => e.id === padreId);
+        const hijo = elements.find((e) => e.id === hijoId);
         if (padre && hijo) {
           if (!herenciaInfo[padreId]) {
             herenciaInfo[padreId] = { esClasePadre: true, hijos: [] };
@@ -1893,9 +2240,11 @@ public class ${className}Controller {
           herenciaInfo[hijoId] = {
             esClasePadre: false,
             clasePadre: padre.name,
-            padreId: padreId
+            padreId: padreId,
           };
-          console.log(`🏗️ Herencia identificada: ${hijo.name} extends ${padre.name}`);
+          console.log(
+            `🏗️ Herencia identificada: ${hijo.name} extends ${padre.name}`
+          );
         }
       }
     });
@@ -1903,38 +2252,40 @@ public class ${className}Controller {
   };
 
   crearRelacionHerencia = (subclaseId, superclaseId, elements) => {
-    const subclase = elements.find(e => e.id === subclaseId);
-    const superclase = elements.find(e => e.id === superclaseId);
+    const subclase = elements.find((e) => e.id === subclaseId);
+    const superclase = elements.find((e) => e.id === superclaseId);
     return {
       elementoConFK: subclaseId,
       elementoReferenciado: superclaseId,
-      tipoRelacion: 'inheritance',
-      tipoRelacionJPA: '@Inheritance',
+      tipoRelacion: "inheritance",
+      tipoRelacionJPA: "@Inheritance",
       esHerencia: true,
       superclase: superclase.name,
-      subclase: subclase.name
+      subclase: subclase.name,
     };
   };
 
   generarAnotacionesRelacion = (relacionInfo) => {
-    let anotaciones = '';
+    let anotaciones = "";
     switch (relacionInfo.tipoRelacionJPA) {
-      case '@ManyToOne':
+      case "@ManyToOne":
         anotaciones += `    ${relacionInfo.tipoRelacionJPA}\n`;
         anotaciones += `    @JoinColumn(name = "${relacionInfo.fkName}")\n`;
-        if (relacionInfo.tipoRelacion === 'composition') {
+        if (relacionInfo.tipoRelacion === "composition") {
           anotaciones += `    @JsonBackReference\n`;
         }
         break;
 
-      case '@OneToOne':
+      case "@OneToOne":
         anotaciones += `    ${relacionInfo.tipoRelacionJPA}\n`;
         anotaciones += `    @JoinColumn(name = "${relacionInfo.fkName}")\n`;
         break;
 
-      case '@OneToMany':
-        anotaciones += `    ${relacionInfo.tipoRelacionJPA}(mappedBy = "${relacionInfo.fkName.replace('Id', '')}")\n`;
-        if (relacionInfo.tipoRelacion === 'composition') {
+      case "@OneToMany":
+        anotaciones += `    ${
+          relacionInfo.tipoRelacionJPA
+        }(mappedBy = "${relacionInfo.fkName.replace("Id", "")}")\n`;
+        if (relacionInfo.tipoRelacion === "composition") {
           anotaciones += `    @JsonManagedReference\n`;
         } else {
           anotaciones += `    @JsonIgnore\n`;
@@ -1945,18 +2296,18 @@ public class ${className}Controller {
   };
 
   generarCampoRelacion = (relacionInfo) => {
-    const nombreCampo = relacionInfo.fkName.replace('Id', '');
+    const nombreCampo = relacionInfo.fkName.replace("Id", "");
     const tipoCampo = relacionInfo.referenciaA;
-    let anotaciones = '';
+    let anotaciones = "";
     switch (relacionInfo.tipoRelacionJPA) {
-      case '@ManyToOne':
+      case "@ManyToOne":
         anotaciones += `    @ManyToOne(fetch = FetchType.LAZY)\n`;
         anotaciones += `    @JoinColumn(name = "${relacionInfo.fkName}")\n`;
-        if (relacionInfo.tipoRelacion === 'composition') {
+        if (relacionInfo.tipoRelacion === "composition") {
           anotaciones += `    @JsonBackReference\n`;
         }
         break;
-      case '@OneToOne':
+      case "@OneToOne":
         anotaciones += `    @OneToOne(fetch = FetchType.LAZY)\n`;
         anotaciones += `    @JoinColumn(name = "${relacionInfo.fkName}")\n`;
         break;
@@ -1968,36 +2319,40 @@ ${anotaciones}    private ${tipoCampo} ${nombreCampo};
   };
 
   obtenerNombrePK = (nombreClase, element) => {
-    return 'id';
+    return "id";
   };
 
   generarConsultasBasicas = (element) => {
-    let consultas = '';
+    let consultas = "";
     if (element.attributes && element.attributes.length > 0) {
-      const atributosValidos = element.attributes.filter(attr =>
-        !attr.isPrimaryKey &&
-        !attr.isForeignKey &&
-        attr.type === 'String' &&
-        attr.name &&
-        attr.name.trim() !== '' &&
-        /^[a-z][a-zA-Z0-9]*$/.test(attr.name) &&
-        attr.name.length >= 2
+      const atributosValidos = element.attributes.filter(
+        (attr) =>
+          !attr.isPrimaryKey &&
+          !attr.isForeignKey &&
+          attr.type === "String" &&
+          attr.name &&
+          attr.name.trim() !== "" &&
+          /^[a-z][a-zA-Z0-9]*$/.test(attr.name) &&
+          attr.name.length >= 2
       );
-      atributosValidos.slice(0, 3).forEach(attr => {
+      atributosValidos.slice(0, 3).forEach((attr) => {
         const capitalizedName = this.capitalize(attr.name);
         consultas += `    List<${element.name}> findBy${capitalizedName}(${attr.type} ${attr.name});
     `;
       });
     }
-    return consultas || '    // No hay atributos String válidos para consultas automáticas';
+    return (
+      consultas ||
+      "    // No hay atributos String válidos para consultas automáticas"
+    );
   };
 
   generarValidacionesRelaciones = (relacionesElement) => {
     if (!relacionesElement || relacionesElement.length === 0) {
-      return '        // Sin relaciones que validar';
+      return "        // Sin relaciones que validar";
     }
-    let validaciones = '';
-    relacionesElement.forEach(relacion => {
+    let validaciones = "";
+    relacionesElement.forEach((relacion) => {
       validaciones += `        // Validar ${relacion.tipoRelacion} con ${relacion.referenciaA}
         `;
     });
@@ -2006,12 +2361,12 @@ ${anotaciones}    private ${tipoCampo} ${nombreCampo};
 
   generarMetodosRelaciones = (className, relacionesElement) => {
     if (!relacionesElement || relacionesElement.length === 0) {
-      return '    // Sin métodos adicionales para relaciones';
+      return "    // Sin métodos adicionales para relaciones";
     }
     let metodos = `
     // ===== MÉTODOS ESPECÍFICOS PARA RELACIONES =====`;
-    relacionesElement.forEach(relacion => {
-      const nombreRelacion = relacion.fkName.replace('Id', '');
+    relacionesElement.forEach((relacion) => {
+      const nombreRelacion = relacion.fkName.replace("Id", "");
       const tipoRelacionado = relacion.referenciaA;
       metodos += `
     
@@ -2019,7 +2374,9 @@ ${anotaciones}    private ${tipoCampo} ${nombreCampo};
      * Obtener ${className.toLowerCase()}s por ${nombreRelacion}
      */
     @Transactional(readOnly = true)
-    public List<${className}> findBy${this.capitalize(nombreRelacion)}(${tipoRelacionado} ${nombreRelacion}) {
+    public List<${className}> findBy${this.capitalize(
+        nombreRelacion
+      )}(${tipoRelacionado} ${nombreRelacion}) {
         // TODO: Implementar consulta personalizada
         return ${className.toLowerCase()}Repository.findAll();
     }`;
@@ -2028,22 +2385,27 @@ ${anotaciones}    private ${tipoCampo} ${nombreCampo};
   };
 
   generarValidacionesDTO = (attr) => {
-    let validaciones = '';
+    let validaciones = "";
     if (attr.isPrimaryKey) {
       validaciones += `    // PK - sin validaciones en DTO
 `;
-    } else if (attr.type === 'String') {
+    } else if (attr.type === "String") {
       validaciones += `    @NotBlank(message = "${attr.name} no puede estar vacío")
     @Size(max = 255, message = "${attr.name} no puede exceder 255 caracteres")
 `;
-    } else if (['Integer', 'Long', 'Double', 'Float'].includes(attr.type)) {
+    } else if (["Integer", "Long", "Double", "Float"].includes(attr.type)) {
       validaciones += `    @NotNull(message = "${attr.name} es requerido")
 `;
     }
     return validaciones;
   };
 
-  generarClaseId = async (projectPath, className, element, relacionesComposicion) => {
+  generarClaseId = async (
+    projectPath,
+    className,
+    element,
+    relacionesComposicion
+  ) => {
     const idClassName = `${className}Id`;
     let idClassContent = `package com.example.demo.entity;
 
@@ -2059,25 +2421,33 @@ public class ${idClassName} implements Serializable {
     private static final long serialVersionUID = 1L;
 
 `;
-    const pkOriginal = element.attributes.find(attr => attr.isPrimaryKey === true);
+    const pkOriginal = element.attributes.find(
+      (attr) => attr.isPrimaryKey === true
+    );
     if (pkOriginal) {
       idClassContent += `    private ${pkOriginal.type} ${pkOriginal.name};
 `;
     }
-    relacionesComposicion.forEach(relacion => {
+    relacionesComposicion.forEach((relacion) => {
       idClassContent += `    private ${relacion.fkType} ${relacion.fkName};
 `;
     });
     idClassContent += `
     public ${idClassName}() {}
 
-    public ${idClassName}(${pkOriginal ? pkOriginal.type + ' ' + pkOriginal.name : ''}${relacionesComposicion.length > 0 && pkOriginal ? ', ' : ''}${relacionesComposicion.map(rel => rel.fkType + ' ' + rel.fkName).join(', ')}) {
+    public ${idClassName}(${
+      pkOriginal ? pkOriginal.type + " " + pkOriginal.name : ""
+    }${
+      relacionesComposicion.length > 0 && pkOriginal ? ", " : ""
+    }${relacionesComposicion
+      .map((rel) => rel.fkType + " " + rel.fkName)
+      .join(", ")}) {
 `;
     if (pkOriginal) {
       idClassContent += `        this.${pkOriginal.name} = ${pkOriginal.name};
 `;
     }
-    relacionesComposicion.forEach(relacion => {
+    relacionesComposicion.forEach((relacion) => {
       idClassContent += `        this.${relacion.fkName} = ${relacion.fkName};
 `;
     });
@@ -2085,17 +2455,21 @@ public class ${idClassName} implements Serializable {
 
 `;
     if (pkOriginal) {
-      idClassContent += `    public ${pkOriginal.type} get${this.capitalize(pkOriginal.name)}() {
+      idClassContent += `    public ${pkOriginal.type} get${this.capitalize(
+        pkOriginal.name
+      )}() {
         return ${pkOriginal.name};
     }
 
-    public void set${this.capitalize(pkOriginal.name)}(${pkOriginal.type} ${pkOriginal.name}) {
+    public void set${this.capitalize(pkOriginal.name)}(${pkOriginal.type} ${
+        pkOriginal.name
+      }) {
         this.${pkOriginal.name} = ${pkOriginal.name};
     }
 
 `;
     }
-    relacionesComposicion.forEach(relacion => {
+    relacionesComposicion.forEach((relacion) => {
       const capitalizedName = this.capitalize(relacion.fkName);
       idClassContent += `    public ${relacion.fkType} get${capitalizedName}() {
         return ${relacion.fkName};
@@ -2107,57 +2481,87 @@ public class ${idClassName} implements Serializable {
 
 `;
     });
-    const allFields = [pkOriginal?.name, ...relacionesComposicion.map(rel => rel.fkName)].filter(Boolean);
+    const allFields = [
+      pkOriginal?.name,
+      ...relacionesComposicion.map((rel) => rel.fkName),
+    ].filter(Boolean);
     idClassContent += `    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ${idClassName} that = (${idClassName}) o;
-        return ${allFields.map(field => `Objects.equals(${field}, that.${field})`).join(' && ')};
+        return ${allFields
+          .map((field) => `Objects.equals(${field}, that.${field})`)
+          .join(" && ")};
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(${allFields.join(', ')});
+        return Objects.hash(${allFields.join(", ")});
     }
 }`;
     fs.writeFileSync(
-      path.join(projectPath, `src/main/java/com/example/demo/entity/${idClassName}.java`),
+      path.join(
+        projectPath,
+        `src/main/java/com/example/demo/entity/${idClassName}.java`
+      ),
       idClassContent
     );
   };
 
-  generarDocumentacionRelaciones = async (projectPath, elements, connections, relaciones) => {
+  generarDocumentacionRelaciones = async (
+    projectPath,
+    elements,
+    connections,
+    relaciones
+  ) => {
     const docContent = `# 📊 Documentación de Relaciones del Proyecto
 
 ## Diagrama de Entidades Generadas
 
-${elements.map(el => `### 🏛️ ${el.name}
+${elements
+  .map(
+    (el) => `### 🏛️ ${el.name}
 - **Atributos**: ${el.attributes ? el.attributes.length : 0}
 - **Relaciones**: ${relaciones[el.id] ? relaciones[el.id].length : 0}
-`).join('\n')}
+`
+  )
+  .join("\n")}
 
 ## 🔗 Relaciones Identificadas
 
-${connections.map((conn, i) => `### ${i + 1}. ${conn.type.toUpperCase()}
-- **De**: ${elements.find(e => e.id === conn.source)?.name || conn.source}
-- **A**: ${elements.find(e => e.id === conn.target)?.name || conn.target}  
+${connections
+  .map(
+    (conn, i) => `### ${i + 1}. ${conn.type.toUpperCase()}
+- **De**: ${elements.find((e) => e.id === conn.source)?.name || conn.source}
+- **A**: ${elements.find((e) => e.id === conn.target)?.name || conn.target}  
 - **Multiplicidad**: ${conn.sourceMultiplicity} -> ${conn.targetMultiplicity}
-- **Etiqueta**: ${conn.label || 'Sin etiqueta'}
-`).join('\n')}
+- **Etiqueta**: ${conn.label || "Sin etiqueta"}
+`
+  )
+  .join("\n")}
 
 ## 🗄️ Mapeo a Base de Datos
 
-${Object.entries(relaciones).map(([elementId, rels]) => {
-      const element = elements.find(e => e.id === elementId);
-      if (!element || !rels.length) return '';
+${Object.entries(relaciones)
+  .map(([elementId, rels]) => {
+    const element = elements.find((e) => e.id === elementId);
+    if (!element || !rels.length) return "";
 
-      return `### Tabla: ${element.name.toLowerCase()}
-${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.referenciaA}
+    return `### Tabla: ${element.name.toLowerCase()}
+${rels
+  .map(
+    (
+      rel
+    ) => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.referenciaA}
   - Tipo: ${rel.tipoRelacion}
-  - JPA: ${rel.tipoRelacionJPA}`).join('\n')}
+  - JPA: ${rel.tipoRelacionJPA}`
+  )
+  .join("\n")}
 `;
-    }).filter(Boolean).join('\n')}
+  })
+  .filter(Boolean)
+  .join("\n")}
 
 ## ⚙️ Instrucciones de Uso
 
@@ -2165,10 +2569,16 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
 2. **PostgreSQL**: \`./mvnw spring-boot:run --spring.profiles.active=postgresql\`
 3. **H2 Console**: http://localhost:8080/h2-console
 `;
-    fs.writeFileSync(path.join(projectPath, 'RELACIONES.md'), docContent);
+    fs.writeFileSync(path.join(projectPath, "RELACIONES.md"), docContent);
   };
 
-  generarRestoEntidad = (className, element, relacionesElement, pkField, pkType) => {
+  generarRestoEntidad = (
+    className,
+    element,
+    relacionesElement,
+    pkField,
+    pkType
+  ) => {
     let entityContent = `
     // ===== CONSTRUCTORS =====
     
@@ -2179,12 +2589,16 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
 
     // Constructor con parámetros básicos
     if (element.attributes && element.attributes.length > 0) {
-      const attributosBasicos = element.attributes.filter(attr => !attr.isForeignKey);
+      const attributosBasicos = element.attributes.filter(
+        (attr) => !attr.isForeignKey
+      );
       if (attributosBasicos.length > 0) {
-        const params = attributosBasicos.map(attr => `${attr.type} ${attr.name}`).join(', ');
+        const params = attributosBasicos
+          .map((attr) => `${attr.type} ${attr.name}`)
+          .join(", ");
         entityContent += `    public ${className}(${params}) {
 `;
-        attributosBasicos.forEach(attr => {
+        attributosBasicos.forEach((attr) => {
           entityContent += `        this.${attr.name} = ${attr.name};
 `;
         });
@@ -2214,7 +2628,7 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
 
     // Getters y setters para atributos normales
     if (element.attributes && element.attributes.length > 0) {
-      element.attributes.forEach(attr => {
+      element.attributes.forEach((attr) => {
         if (!attr.isPrimaryKey && !attr.isForeignKey) {
           const capitalizedName = this.capitalize(attr.name);
           entityContent += `    public ${attr.type} get${capitalizedName}() {
@@ -2232,8 +2646,8 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
 
     // Getters y setters para foreign keys
     if (relacionesElement && relacionesElement.length > 0) {
-      relacionesElement.forEach(relacion => {
-        if (relacion.tipoRelacion !== 'inheritance') {
+      relacionesElement.forEach((relacion) => {
+        if (relacion.tipoRelacion !== "inheritance") {
           const capitalizedFk = this.capitalize(relacion.fkName);
           entityContent += `    public ${relacion.fkType} get${capitalizedFk}() {
         return ${relacion.fkName};
@@ -2246,7 +2660,9 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
 `;
 
           // Getter y setter para el objeto relacionado
-          const nombreCampoRelacion = relacion.fkName.replace(/Id$/, '').replace(/id$/, '');
+          const nombreCampoRelacion = relacion.fkName
+            .replace(/Id$/, "")
+            .replace(/id$/, "");
           const capitalizedRelacion = this.capitalize(nombreCampoRelacion);
           entityContent += `    public ${relacion.referenciaA} get${capitalizedRelacion}() {
         return ${nombreCampoRelacion};
@@ -2271,9 +2687,9 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
     // Agregar campos al toString
     const allFields = [];
     if (pkField) allFields.push(`"${pkField}=" + ${pkField}`);
-    
+
     if (element.attributes && element.attributes.length > 0) {
-      element.attributes.forEach(attr => {
+      element.attributes.forEach((attr) => {
         if (!attr.isPrimaryKey && !attr.isForeignKey) {
           allFields.push(`", ${attr.name}=" + ${attr.name}`);
         }
@@ -2281,14 +2697,14 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
     }
 
     if (relacionesElement && relacionesElement.length > 0) {
-      relacionesElement.forEach(relacion => {
-        if (relacion.tipoRelacion !== 'inheritance') {
+      relacionesElement.forEach((relacion) => {
+        if (relacion.tipoRelacion !== "inheritance") {
           allFields.push(`", ${relacion.fkName}=" + ${relacion.fkName}`);
         }
       });
     }
 
-    entityContent += allFields.join(' +\n                ');
+    entityContent += allFields.join(" +\n                ");
     entityContent += ` +
                 '}';
     }
@@ -2298,12 +2714,12 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
         if (this == o) return true;
         if (!(o instanceof ${className})) return false;
         ${className} that = (${className}) o;
-        return Objects.equals(${pkField || 'id'}, that.${pkField || 'id'});
+        return Objects.equals(${pkField || "id"}, that.${pkField || "id"});
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(${pkField || 'id'});
+        return Objects.hash(${pkField || "id"});
     }
 }`;
 
@@ -2311,7 +2727,7 @@ ${rels.map(rel => `- **${rel.fkName}** (${rel.fkType}) -> Referencia a ${rel.ref
   };
 
   capitalize = (str) => {
-    if (!str) return '';
+    if (!str) return "";
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 }
